@@ -35,3 +35,40 @@ declare module "sonner" {
 
   export const Toaster: React.FC<ToasterProps>;
 }
+
+declare module "qr-scanner" {
+  export interface QrScannerOptions {
+    preferredCamera?: "user" | "environment";
+    maxScansPerSecond?: number;
+    highlightScanRegion?: boolean;
+    highlightCodeOutline?: boolean;
+    overlay?: HTMLElement;
+    returnDetailedScanResult?: boolean;
+  }
+
+  export interface ScanResult {
+    data: string;
+    cornerPoints: Array<{ x: number; y: number }>;
+  }
+
+  export default class QrScanner {
+    constructor(
+      video: HTMLVideoElement,
+      onDecodeCallback: (result: ScanResult | string) => void,
+      options?: QrScannerOptions
+    );
+
+    static hasCamera(): Promise<boolean>;
+    static listCameras(doNotRequest?: boolean): Promise<Array<{ id: string; label: string }>>;
+
+    start(): Promise<void>;
+    stop(): void;
+    destroy(): void;
+    pause(): void;
+    
+    setCamera(cameraId: string): Promise<void>;
+    turnFlashOn(): Promise<void>;
+    turnFlashOff(): Promise<void>;
+    isFlashOn(): boolean;
+  }
+}
