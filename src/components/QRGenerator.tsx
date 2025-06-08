@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { QrCode, RefreshCw, Copy, Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 const QRGenerator = () => {
   const [qrCode, setQrCode] = useState("");
@@ -35,23 +34,6 @@ const QRGenerator = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(qrCode);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = qrUrl;
-    link.download = `qr-code-${Date.now()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const progressValue = ((5 - timeLeft) / 5) * 100;
 
   return (
@@ -64,17 +46,6 @@ const QRGenerator = () => {
         </CardContent>
       </Card>
       
-      <div className="flex justify-center gap-2">
-        <Button onClick={handleCopy} className="bg-blue-600 hover:bg-blue-500">
-          <Copy className="w-4 h-4 mr-2" />
-          Copy Code
-        </Button>
-        <Button onClick={handleDownload} className="bg-green-600 hover:bg-green-500">
-          <Download className="w-4 h-4 mr-2" />
-          Download
-        </Button>
-      </div>
-
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-slate-300 text-sm">Expires in:</span>

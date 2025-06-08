@@ -50,8 +50,9 @@ declare module "qr-scanner" {
     data: string;
     cornerPoints: Array<{ x: number; y: number }>;
   }
-
   export default class QrScanner {
+    static WORKER_PATH: string;
+    
     constructor(
       video: HTMLVideoElement,
       onDecodeCallback: (result: ScanResult | string) => void,
