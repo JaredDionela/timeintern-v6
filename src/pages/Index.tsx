@@ -1,56 +1,270 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { useState } from "react";
+import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AuthHeader } from "@/components/auth/AuthHeader";
-import { SignInForm } from "@/components/auth/SignInForm";
-import { SignUpForm } from "@/components/auth/SignUpForm";
-import { useAuth } from "@/hooks/useAuth";
-import { SignUpData, SignInData } from "@/types/auth";
-import { validateRequiredHours } from "@/utils/auth";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
-  const { loading, handleAuth } = useAuth();
+  const navigate = useNavigate();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [requiredHours, setRequiredHours] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleSignUpSubmit = async (data: SignUpData) => {
-    const validatedData = {
-      ...data,
-      requiredHours: validateRequiredHours(data.requiredHours.toString())
-    };
-    await handleAuth(validatedData, true);
-  };
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      if (isSignUp) {
+        // Don't allow admin emails to sign up as interns
+        if (email.includes('admin')) {
+          throw new Error('Admin emails cannot be used for intern signup');
+        }
 
-  const handleSignInSubmit = async (data: SignInData) => {
-    await handleAuth(data, false);
+        // Handle sign up
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}?verification=success`,
+            data: {
+              name: name,
+              required_hours: parseInt(requiredHours || "120")
+            }
+          }
+        });
+
+        if (signUpError) {
+          console.error("Signup error:", signUpError);
+          throw signUpError;
+        }
+
+        if (!data.user) {
+          throw new Error('Failed to create user');
+        }
+
+        // Create intern profile
+        const { error: profileError } = await supabase
+          .from('intern_profiles')
+          .insert([
+            {
+              user_id: data.user.id,
+              name,
+              email,
+              required_hours: parseInt(requiredHours || "120"),
+            }
+          ]);
+
+        if (profileError) {
+          console.error("Profile creation error:", profileError);
+          throw new Error("Failed to create intern profile. Please contact admin.");
+        }
+
+        toast({
+          title: "Success",
+          description: "Account created successfully. Please check your email for verification.",
+          duration: 5000,
+        });
+
+      } else {
+        // Handle sign in
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          if (signInError.message.includes('Email not confirmed')) {
+            throw new Error('Please check your email to verify your account before signing in.');
+          }
+          console.error("Signin error:", signInError);
+          throw signInError;
+        }
+
+        if (!data.user) {
+          throw new Error('No user found');
+        }
+
+        if (!data.user.email_confirmed_at) {
+          throw new Error('Please verify your email address before signing in.');
+        }
+
+        // Determine if user is admin by email (case-insensitive)
+        const isAdminUser = data.user.email?.toLowerCase().includes('admin');
+
+        // Navigate based on user type and admin checkbox
+        if (isAdminUser && isAdmin) {
+          navigate("/admin");
+        } else if (!isAdminUser || !isAdmin) {
+          // Check if user has an intern profile
+          const { data: profile, error: profileError } = await supabase
+            .from('intern_profiles')
+            .select('*')
+            .eq('user_id', data.user.id)
+            .maybeSingle();
+
+          if (profileError) {
+            console.error("Profile fetch error:", profileError);
+            throw new Error(`Failed to fetch intern profile: ${profileError.message}`);
+          }
+
+          if (!profile) {
+            // No profile exists, create one
+            const { error: createError } = await supabase
+              .from('intern_profiles')
+              .insert({
+                user_id: data.user.id,
+                name: data.user.email?.split('@')[0] || 'New Intern',
+                email: data.user.email || '',
+                required_hours: 120 // Default value
+              });
+
+            if (createError) {
+              console.error("Profile creation error:", createError);
+              throw new Error("Failed to create intern profile. Please contact admin.");
+            }
+          }
+
+          // Navigate to intern dashboard whether profile existed or was just created
+          navigate("/intern");
+        } else {
+          throw new Error('Invalid login attempt');
+        }
+      }
+    } catch (error: any) {
+      console.error("Authentication error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Authentication failed",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5"></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-purple-500/10"></div>
       
-      <Card className="w-full max-w-md backdrop-blur-sm relative z-10 shadow-2xl">
-        <AuthHeader />
+      <Card className="w-full max-w-md bg-slate-800/50 border-slate-700 backdrop-blur-sm relative z-10">
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto w-56 h-42">
+            <img src="/app-logo.png" alt="App Logo" className="w-full h-full object-contain" />
+          </div>
+          <div>
+            <CardDescription className="text-slate-400">
+              Ariva Academy
+            </CardDescription>
+          </div>
+        </CardHeader>
         
         <CardContent>
-          <Tabs 
-            defaultValue="signin" 
-            className="space-y-4"
-          >
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs defaultValue="signin" className="space-y-4" onValueChange={(value) => setIsSignUp(value === 'signup')}>
+            <TabsList className="grid w-full grid-cols-2 bg-slate-700/50">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin">
-              <SignInForm 
-                onSubmit={handleSignInSubmit}
-                loading={loading}
-              />
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signin-email">Email</Label>
+                  <Input
+                    id="signin-email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signin-password">Password</Label>
+                  <Input
+                    id="signin-password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isAdmin"
+                    checked={isAdmin}
+                    onChange={(e) => setIsAdmin(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="isAdmin">Login as Admin</Label>
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign In"}
+                </Button>
+              </form>
             </TabsContent>
 
             <TabsContent value="signup">
-              <SignUpForm 
-                onSubmit={handleSignUpSubmit}
-                loading={loading}
-              />
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-name">Full Name</Label>
+                  <Input
+                    id="signup-name"
+                    placeholder="Enter your full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="Create a password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="required-hours">Required Hours</Label>
+                  <Input
+                    id="required-hours"
+                    type="number"
+                    placeholder="Enter required hours"
+                    value={requiredHours}
+                    onChange={(e) => setRequiredHours(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Signing up..." : "Sign Up"}
+                </Button>
+              </form>
             </TabsContent>
           </Tabs>
         </CardContent>

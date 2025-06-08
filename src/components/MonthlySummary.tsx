@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
@@ -16,17 +17,27 @@ interface TimeLogEntry {
 const MonthlySummary = () => {
   const [monthlyData, setMonthlyData] = useState<TimeLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const { toast } = useToast();
 
   useEffect(() => {
     fetchMonthlyData();
-  }, []);
+  }, [selectedMonth, selectedYear]);
 
   const fetchMonthlyData = async () => {
     try {
+      setLoading(true);
+      
+      // Get time logs for selected month/year
+      const startDate = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0];
+      const endDate = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
+
       const { data: timeLogsData, error: timeLogsError } = await supabase
         .from('time_logs')
         .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate)
         .order('date', { ascending: false });
 
       if (timeLogsError) throw timeLogsError;
@@ -64,26 +75,51 @@ const MonthlySummary = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Date', 'Intern', 'Time In', 'Time Out', 'Hours'];
+    const headers = ['Date', 'Intern Name', 'Time In', 'Time Out', 'Total Hours'];
     const csvContent = [
       headers.join(','),
       ...monthlyData.map(entry => [
         entry.date,
-        entry.intern_name,
+        `"${entry.intern_name}"`,
         entry.time_in || 'N/A',
         entry.time_out || 'N/A',
-        entry.total_hours || 0
+        entry.total_hours?.toFixed(2) || '0.00'
       ].join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'monthly_summary.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `monthly_summary_${selectedYear}_${selectedMonth.toString().padStart(2, '0')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export Successful",
+      description: `Monthly summary for ${selectedMonth}/${selectedYear} exported successfully`,
+    });
   };
+
+  const months = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" }
+  ];
+
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   if (loading) {
     return (
@@ -105,7 +141,7 @@ const MonthlySummary = () => {
               Monthly Summary
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Daily attendance logs for all interns
+              Daily attendance logs for selected month
             </CardDescription>
           </div>
           <Button 
@@ -117,6 +153,32 @@ const MonthlySummary = () => {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Select onValueChange={(value) => setSelectedMonth(Number(value))} defaultValue={`${selectedMonth}`}>
+            <SelectTrigger className="w-[120px] bg-slate-700 border-slate-600 text-white">
+              <SelectValue placeholder="Select month" />
+            </SelectTrigger>
+            <SelectContent>
+              {months.map((month) => (
+                <SelectItem key={month.value} value={`${month.value}`}>
+                  {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select onValueChange={(value) => setSelectedYear(Number(value))} defaultValue={`${selectedYear}`}>
+            <SelectTrigger className="w-[100px] bg-slate-700 border-slate-600 text-white">
+              <SelectValue placeholder="Select year" />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((year) => (
+                <SelectItem key={year} value={`${year}`}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardHeader>
       <CardContent>
@@ -138,14 +200,14 @@ const MonthlySummary = () => {
                   <td className="py-3 px-4 text-white font-medium">{entry.intern_name}</td>
                   <td className="py-3 px-4 text-green-400">{entry.time_in || 'N/A'}</td>
                   <td className="py-3 px-4 text-red-400">{entry.time_out || 'N/A'}</td>
-                  <td className="py-3 px-4 text-blue-400 font-semibold">{entry.total_hours || 0}h</td>
+                  <td className="py-3 px-4 text-blue-400 font-semibold">{entry.total_hours?.toFixed(2) || '0.00'}h</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {monthlyData.length === 0 && (
             <div className="text-center py-8 text-slate-400">
-              No data available
+              No data available for {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
             </div>
           )}
         </div>

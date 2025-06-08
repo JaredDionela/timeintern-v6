@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { QrCode, LogOut, DollarSign } from "lucide-react";
+import { QrCode, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import QRScanner from "@/components/QRScanner";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,7 +17,6 @@ const InternDashboard = () => {
   const [currentMonthSalary, setCurrentMonthSalary] = useState(0);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [signInTime, setSignInTime] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     checkAuth();
@@ -46,11 +45,6 @@ const InternDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
   }, []);
 
   const checkAuth = async () => {
@@ -184,35 +178,26 @@ const InternDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5"></div>
-      
-      <div className="max-w-4xl mx-auto space-y-6 relative z-10">
+      <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-white">
               Hi, {internName}!
             </h1>
             <p className="text-slate-400">Track your internship progress</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-white font-semibold">{currentTime.toLocaleTimeString()}</div>
-              <div className="text-slate-400 text-sm">{currentTime.toLocaleDateString()}</div>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={handleLogout}
-              className="text-slate-400 hover:text-white"
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button 
+            variant="ghost" 
+            onClick={handleLogout}
+            className="text-slate-400 hover:text-white"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Progress Card */}
-        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
+        <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
             <CardTitle className="text-white">Hours Progress</CardTitle>
             <CardDescription className="text-slate-400">
@@ -220,12 +205,7 @@ const InternDashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Progress value={progressPercentage} className="h-3 bg-slate-700">
-              <div 
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(progressPercentage, 100)}%` }}
-              />
-            </Progress>
+            <Progress value={progressPercentage} className="h-2" />
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">
                 {hoursWorked.toFixed(2)} hours completed
@@ -234,71 +214,46 @@ const InternDashboard = () => {
                 {requiredHours} hours required
               </span>
             </div>
-            <div className="text-center">
-              <span className="text-2xl font-bold text-white">
-                {progressPercentage.toFixed(1)}%
-              </span>
-              <p className="text-slate-400 text-sm">Complete</p>
-            </div>
           </CardContent>
         </Card>
 
         {/* Time Tracking Card */}
-        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
+        <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <QrCode className="w-5 h-5" />
-              Time Tracking
-            </CardTitle>
+            <CardTitle className="text-white">Time Tracking</CardTitle>
             <CardDescription className="text-slate-400">
               {isSignedIn 
                 ? `Signed in at ${new Date(signInTime!).toLocaleTimeString()}`
-                : "Ready to start your work day"
+                : "Not currently signed in"
               }
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button 
               onClick={() => setShowScanner(true)}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+              className="w-full"
             >
               <QrCode className="w-4 h-4 mr-2" />
               {isSignedIn ? "Scan to Time Out" : "Scan to Time In"}
             </Button>
-            {isSignedIn && (
-              <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <p className="text-green-400 text-sm font-medium">✓ Currently signed in</p>
-                <p className="text-slate-400 text-xs">Remember to scan out when you finish work</p>
-              </div>
-            )}
           </CardContent>
         </Card>
 
         {/* Monthly Earnings Card */}
-        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
+        <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <DollarSign className="w-5 h-5" />
-              Monthly Earnings
-            </CardTitle>
+            <CardTitle className="text-white">Monthly Earnings</CardTitle>
             <CardDescription className="text-slate-400">
               Current month's earnings based on hours worked
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-3xl font-bold text-white">
+          <CardContent>
+            <div className="text-2xl font-bold text-white">
               ₱{currentMonthSalary.toFixed(2)}
             </div>
-            <div className="text-sm text-slate-400 space-y-1">
-              <p>Based on ₱200 per 8 hours</p>
-              <p>Days completed: {Math.floor(hoursWorked / 8)}</p>
-              <p>Partial hours: {(hoursWorked % 8).toFixed(2)}h</p>
-            </div>
-            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <p className="text-blue-400 text-sm font-medium">
-                Potential this month: ₱{Math.floor(requiredHours / 8) * 200}
-              </p>
-            </div>
+            <p className="text-sm text-slate-400">
+              Based on ₱200 per 8 hours
+            </p>
           </CardContent>
         </Card>
 

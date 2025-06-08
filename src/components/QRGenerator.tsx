@@ -1,26 +1,24 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { RefreshCw, Copy, Download } from "lucide-react";
+import { QrCode, RefreshCw, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const QRGenerator = () => {
   const [qrCode, setQrCode] = useState("");
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(5);
   const [qrUrl, setQrUrl] = useState("");
 
   useEffect(() => {
     const generateQR = () => {
       const timestamp = Date.now();
-      const randomBytes = new Uint8Array(8);
+      const randomBytes = new Uint8Array(16);
       crypto.getRandomValues(randomBytes);
       const randomId = Array.from(randomBytes, byte => byte.toString(16).padStart(2, '0')).join('');
-      
-      // Generate company-specific QR code that matches our validation pattern
-      const newCode = `TIMEINTERN-OFFICE-${timestamp}-${randomId}`;
+      const newCode = `attendance-${timestamp}-${randomId}`;
       setQrCode(newCode);
-      setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(newCode)}&size=250x250&margin=10`);
-      setTimeLeft(30); // Changed to 30 seconds for more practical use
+      setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(newCode)}&size=200x200`);
+      setTimeLeft(5);
     };
 
     generateQR();
@@ -28,7 +26,7 @@ const QRGenerator = () => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           generateQR();
-          return 30; // Reset to 30 seconds
+          return 5;
         }
         return prev - 1;
       });

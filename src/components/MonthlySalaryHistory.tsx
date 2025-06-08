@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
@@ -17,12 +18,33 @@ interface SalaryRecord {
 
 const MonthlySalaryHistory = () => {
   const [salaryHistory, setSalaryHistory] = useState<SalaryRecord[]>([]);
+  const [filteredHistory, setFilteredHistory] = useState<SalaryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchSalaryHistory();
   }, []);
+
+  useEffect(() => {
+    filterSalaryHistory();
+  }, [salaryHistory, selectedMonth, selectedYear]);
+
+  const filterSalaryHistory = () => {
+    let filtered = salaryHistory;
+    
+    if (selectedMonth) {
+      filtered = filtered.filter(record => record.month === selectedMonth);
+    }
+    
+    if (selectedYear) {
+      filtered = filtered.filter(record => record.year === selectedYear);
+    }
+    
+    setFilteredHistory(filtered);
+  };
 
   const fetchSalaryHistory = async () => {
     try {
@@ -67,22 +89,32 @@ const MonthlySalaryHistory = () => {
     const headers = ['Month', 'Year', 'Intern Name', 'Total Hours', 'Total Salary'];
     const csvContent = [
       headers.join(','),
-      ...salaryHistory.map(record => [
-        record.month,
+      ...filteredHistory.map(record => [
+        getMonthName(record.month),
         record.year,
-        record.intern_name,
-        record.total_hours,
-        record.total_salary
+        `"${record.intern_name}"`,
+        record.total_hours.toFixed(2),
+        record.total_salary.toFixed(2)
       ].join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'monthly_salary_history.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    const fileName = selectedMonth && selectedYear 
+      ? `salary_history_${selectedYear}_${selectedMonth.toString().padStart(2, '0')}.csv`
+      : `salary_history_all.csv`;
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export Successful",
+      description: `Salary history exported successfully`,
+    });
   };
 
   const getMonthName = (month: number) => {
@@ -90,25 +122,31 @@ const MonthlySalaryHistory = () => {
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
-    return months[month - 1];
+    return months[month - 1] || 'Unknown';
   };
+
+  const months = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" }
+  ];
+
+  const availableYears = Array.from(new Set(salaryHistory.map(record => record.year))).sort((a, b) => b - a);
 
   if (loading) {
     return (
-      <div className="w-full bg-white/5 rounded-lg p-6 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-6 h-6 border-3 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm text-gray-300">Loading salary history...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!salaryHistory || salaryHistory.length === 0) {
-    return (
       <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
         <CardContent className="p-6">
-          <div className="text-white">No salary history available</div>
+          <div className="text-white">Loading salary history...</div>
         </CardContent>
       </Card>
     );
@@ -124,7 +162,7 @@ const MonthlySalaryHistory = () => {
               Monthly Salary History
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Track monthly salary payments and hours
+              Historical salary records for all interns
             </CardDescription>
           </div>
           <Button 
@@ -136,6 +174,34 @@ const MonthlySalaryHistory = () => {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Select onValueChange={(value) => setSelectedMonth(value === "all" ? null : Number(value))} defaultValue="all">
+            <SelectTrigger className="w-[140px] bg-slate-700 border-slate-600 text-white">
+              <SelectValue placeholder="Filter by month" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Months</SelectItem>
+              {months.map((month) => (
+                <SelectItem key={month.value} value={`${month.value}`}>
+                  {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select onValueChange={(value) => setSelectedYear(value === "all" ? null : Number(value))} defaultValue="all">
+            <SelectTrigger className="w-[120px] bg-slate-700 border-slate-600 text-white">
+              <SelectValue placeholder="Filter by year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={`${year}`}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardHeader>
       <CardContent>
@@ -151,17 +217,22 @@ const MonthlySalaryHistory = () => {
               </tr>
             </thead>
             <tbody>
-              {salaryHistory.map((record, index) => (
-                <tr key={index} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+              {filteredHistory.map((record) => (
+                <tr key={record.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
                   <td className="py-3 px-4 text-slate-200">{getMonthName(record.month)}</td>
                   <td className="py-3 px-4 text-slate-200">{record.year}</td>
                   <td className="py-3 px-4 text-white font-medium">{record.intern_name}</td>
-                  <td className="py-3 px-4 text-blue-400 font-semibold">{record.total_hours}h</td>
-                  <td className="py-3 px-4 text-green-400 font-semibold">₱{record.total_salary.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-blue-400">{record.total_hours.toFixed(2)}h</td>
+                  <td className="py-3 px-4 text-green-400 font-semibold">₱{record.total_salary.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {filteredHistory.length === 0 && (
+            <div className="text-center py-8 text-slate-400">
+              No salary records found for the selected filters
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

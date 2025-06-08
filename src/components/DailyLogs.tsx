@@ -96,23 +96,25 @@ const DailyLogs = () => {
       headers.join(','),
       ...filteredLogs.map(entry => [
         entry.date,
-        entry.intern_name,
+        `"${entry.intern_name}"`,
         entry.time_in || 'N/A',
         entry.time_out || 'N/A',
-        entry.total_hours || 0
+        entry.total_hours?.toFixed(2) || '0.00'
       ].join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `daily_logs_${selectedDate}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `daily_logs_${selectedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
     toast({
-      title: "Export Complete",
+      title: "Export Successful",
       description: `Daily logs for ${selectedDate} exported successfully`,
     });
   };

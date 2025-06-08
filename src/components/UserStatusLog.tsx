@@ -12,6 +12,8 @@ interface InternStatus {
   required_hours: number;
   completed_hours: number;
   status: string;
+  is_online: boolean;
+  last_activity?: string | null;
 }
 
 const UserStatusLog = () => {
@@ -44,7 +46,8 @@ const UserStatusLog = () => {
     try {
       const { data: profiles, error: profilesError } = await supabase
         .from('intern_profiles')
-        .select('*');
+        .select('*')
+        .order('name', { ascending: true });
 
       if (profilesError) throw profilesError;
       
@@ -52,28 +55,47 @@ const UserStatusLog = () => {
 
       const internData = await Promise.all(
         (profiles || []).map(async (profile) => {
-          // Get total hours from time_logs
-          const { data: timeLogs, error: timeError } = await supabase
+          // Get total hours from monthly_salary_history for current month
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+
+          const { data: monthlyRecord } = await supabase
+            .from('monthly_salary_history')
+            .select('total_hours')
+            .eq('user_id', profile.user_id)
+            .eq('month', month)
+            .eq('year', year)
+            .single();
+
+          let completedHours = monthlyRecord?.total_hours || 0;
+
+          // Check if user is currently online (has time_in but no time_out today)
+          const today = new Date().toISOString().split('T')[0];
+          const { data: todayLog } = await supabase
             .from('time_logs')
-            .select('time_in, time_out, total_hours')
-            .eq('user_id', profile.user_id);
+            .select('time_in, time_out')
+            .eq('user_id', profile.user_id)
+            .eq('date', today)
+            .single();
 
-          if (timeError) throw timeError;
-
-          // Calculate completed hours including current session if active
-          let completedHours = 0;
-          
-          for (const log of timeLogs || []) {
-            if (log.total_hours) {
-              completedHours += log.total_hours;
-            } else if (log.time_in && !log.time_out) {
-              // Calculate ongoing session hours
-              const currentHours = (new Date().getTime() - new Date(log.time_in).getTime()) / (1000 * 60 * 60);
-              completedHours += currentHours;
-            }
+          let isOnline = false;
+          if (todayLog && todayLog.time_in && !todayLog.time_out) {
+            isOnline = true;
           }
 
-          const status = completedHours >= profile.required_hours ? "Completed" : "In Progress";
+          // Get most recent activity (any time_in)
+          const { data: recentActivity } = await supabase
+            .from('time_logs')
+            .select('time_in')
+            .eq('user_id', profile.user_id)
+            .not('time_in', 'is', null)
+            .order('date', { ascending: false })
+            .order('time_in', { ascending: false })
+            .limit(1)
+            .single();
+
+          const progressStatus = completedHours >= profile.required_hours ? "Completed" : "In Progress";
 
           return {
             id: profile.id,
@@ -81,7 +103,9 @@ const UserStatusLog = () => {
             email: profile.email,
             required_hours: profile.required_hours,
             completed_hours: completedHours,
-            status: status
+            status: progressStatus,
+            is_online: isOnline,
+            last_activity: recentActivity?.time_in || null
           };
         })
       );
@@ -146,12 +170,21 @@ const UserStatusLog = () => {
                       <h3 className="text-white font-semibold">{intern.name}</h3>
                       <p className="text-slate-400 text-sm">{intern.email}</p>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      intern.status === "Active" 
-                        ? "bg-green-500/20 text-green-400" 
-                        : "bg-slate-500/20 text-slate-400"
-                    }`}>
-                      {intern.status}
+                    <div className="flex items-center gap-2">
+                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        intern.is_online 
+                          ? "bg-green-500/20 text-green-400" 
+                          : "bg-slate-500/20 text-slate-400"
+                      }`}>
+                        {intern.is_online ? "Online" : "Offline"}
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        intern.status === "Completed" 
+                          ? "bg-blue-500/20 text-blue-400" 
+                          : "bg-yellow-500/20 text-yellow-400"
+                      }`}>
+                        {intern.status}
+                      </div>
                     </div>
                   </div>
                   
