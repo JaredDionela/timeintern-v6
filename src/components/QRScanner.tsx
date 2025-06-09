@@ -188,19 +188,28 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
       
       if (videoRef.current) {
         qrScannerRef.current = new QrScanner(
-          videoRef.current,
-          (result) => {
+          videoRef.current, 
+          (result) => { // This is the direct callback from the qr-scanner library
             const qrData = typeof result === 'string' ? result : result.data;
-            console.log('QR Code detected:', qrData);
-            // Ensure qrData is not empty before calling handleScan
+            
+            // Log immediately when the library detects something
+            console.log('QR Scanner library detected raw result:', result);
+            
             if (qrData) {
-              handleScan(qrData);
+              console.log('QR Code data extracted:', qrData);
+              // Call handleScan only if data is valid and no other scan is in progress
+              if (!scanInProgress) {
+                handleScan(qrData);
+              } else {
+                console.log('Scan already in progress. Ignoring new QR data:', qrData);
+              }
             } else {
-              console.log('Empty QR data received.');
+              // This might happen if the library fires an event with no decodable QR code
+              console.log('QR Scanner detected an empty or undecodable result.');
             }
           },
           {
-            returnDetailedScanResult: true,
+            returnDetailedScanResult: true, 
             highlightScanRegion: true,
             highlightCodeOutline: true,
             maxScansPerSecond: 2,
@@ -251,17 +260,17 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
   };
 
   const handleScan = async (qrData: string) => {
-    if (scanInProgress) return;
-    // Add a check for empty qrData at the beginning of handleScan
+    // The initial check for scanInProgress is now handled before calling handleScan
+    // if (scanInProgress) return; 
+
+    // Add a check for empty qrData at the beginning of handleScan (should be redundant if checked in callback)
     if (!qrData) {
       console.log('handleScan called with empty qrData. Aborting.');
-      setScanInProgress(false); // Ensure scanInProgress is reset
-      // Optionally, restart the scanner if it was paused
-      if (qrScannerRef.current && isScanning && videoRef.current && videoRef.current.srcObject && (videoRef.current.srcObject as MediaStream).active) {
-        qrScannerRef.current.start().catch(e => console.error("Error restarting scanner after empty scan:", e));
-      }
+      // setScanInProgress(false); // Not needed here as it's handled by the caller or finally block
       return;
     }
+    
+    console.log('handleScan called with:', qrData);
     setScanInProgress(true);
 
     if (qrScannerRef.current) {
@@ -280,6 +289,7 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
           description: "This QR code is not a valid attendance code.",
           variant: "destructive",
         });
+        // No need to call setScanInProgress(false) here, finally block will handle it
         return; 
       }
       
@@ -383,18 +393,20 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
     } finally {
       setScanInProgress(false);
       setTimeout(() => {
-        if (qrScannerRef.current && isScanning && videoRef.current) { 
+        if (qrScannerRef.current && isScanning && videoRef.current && videoRef.current.srcObject) { 
           try {
-            if (videoRef.current.srcObject && (videoRef.current.srcObject as MediaStream).active) {
+            if ((videoRef.current.srcObject as MediaStream).active) {
               qrScannerRef.current.start().then(() => {
                 console.log('QR Scanner restarted after processing.');
               }).catch(e => console.error("Error restarting scanner after processing:", e));
             } else {
-              console.log("Video stream inactive, not restarting scanner immediately.");
+              console.log("Video stream inactive, not restarting scanner immediately after processing.");
             }
           } catch(e) {
-            console.error("Error trying to restart scanner:", e);
+            console.error("Error trying to restart scanner after processing:", e);
           }
+        } else {
+          console.log("Conditions not met to restart scanner after processing.");
         }
       }, 1500); 
     }
