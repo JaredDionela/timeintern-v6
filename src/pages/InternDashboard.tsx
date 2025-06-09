@@ -45,11 +45,9 @@ const InternDashboard = () => {
         },
         (payload) => {
           console.log('Time logs change received!', payload);
-          // Immediate refresh of status and hours with shorter delay
-          setTimeout(() => {
-            fetchTodayStatus();
-            fetchTotalHours();
-          }, 100);
+          // Immediate refresh of status and hours
+          fetchTodayStatus();
+          fetchTotalHours();
         }
       )
       .on(
@@ -62,16 +60,11 @@ const InternDashboard = () => {
         (payload) => {
           console.log('Monthly salary change received!', payload);
           // Refresh total hours when monthly record updates
-          setTimeout(() => {
-            fetchTotalHours();
-          }, 100);
+          fetchTotalHours();
         }
       )
       .subscribe((status) => {
         console.log('Subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to real-time updates');
-        }
       });
 
     // Also set up a periodic refresh as backup

@@ -28,7 +28,7 @@ export const useAuth = (): UseAuthReturn => {
         } else if (session) {
           setSession(session);
           setUser(session.user);
-          setIsAdmin(session.user?.email?.includes('admin') || false);
+          setIsAdmin(session.user?.email?.toLowerCase().includes('admin') || false);
         }
       } catch (error) {
         console.error('Session check error:', error);
@@ -46,7 +46,7 @@ export const useAuth = (): UseAuthReturn => {
         
         setSession(session);
         setUser(session?.user ?? null);
-        setIsAdmin(session?.user?.email?.includes('admin') || false);
+        setIsAdmin(session?.user?.email?.toLowerCase().includes('admin') || false);
         setLoading(false);
 
         // Handle session persistence based on localStorage flag
