@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { QrCode, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { LogOut, QrCode } from "lucide-react";
 import QRScanner from "@/components/QRScanner";
-import { supabase } from "@/integrations/supabase/client";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const InternDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
   const [internName, setInternName] = useState("");
+  const [internEmail, setInternEmail] = useState("");
+  const [internAvatar, setInternAvatar] = useState("");
   const [hoursWorked, setHoursWorked] = useState(0);
   const [requiredHours, setRequiredHours] = useState(120);
   const [currentMonthSalary, setCurrentMonthSalary] = useState(0);
@@ -22,9 +25,8 @@ const InternDashboard = () => {
     checkAuth();
     fetchInternProfile();
     fetchTodayStatus();
-    fetchTotalHours(); // Added this call
-    
-    // Set up real-time subscription for time_logs
+    fetchTotalHours();
+
     const channel = supabase
       .channel('time_logs_changes')
       .on(
@@ -69,21 +71,28 @@ const InternDashboard = () => {
         .eq('user_id', user.id)
         .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') throw error;
       
       if (profile) {
         setInternName(profile.name);
         setRequiredHours(profile.required_hours);
+        setInternEmail(profile.email || "");
+        // setInternAvatar(profile.avatar_url || ""); 
       } else {
-        // Set default values if no profile exists
         setInternName("Intern");
         setRequiredHours(120);
+        const { data: { user: authUser } } = await supabase.auth.getUser(); // Renamed to avoid conflict
+        setInternEmail(authUser?.email || "");
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
-      // Set default values on error
       setInternName("Intern");
       setRequiredHours(120);
+      const { data: { user: authUser } } = await supabase.auth.getUser(); // Renamed to avoid conflict
+      setInternEmail(authUser?.email || "");
+    } finally {
+      // Ensure loading is set to false in all paths of profile fetching
+      // setLoading(false); // This might be too early if other fetches are pending
     }
   };
 
@@ -91,8 +100,8 @@ const InternDashboard = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setLoading(false);
-        navigate('/');
+        // setLoading(false); // Moved to fetchTotalHours finally block
+        // navigate('/'); // Avoid navigating away if other fetches are still running
         return;
       }
 
@@ -102,9 +111,11 @@ const InternDashboard = () => {
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(); // Use maybeSingle to handle no logs for today
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 is the "no rows returned" error
+      if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
@@ -117,7 +128,6 @@ const InternDashboard = () => {
       }
     } catch (error) {
       console.error('Error checking today status:', error);
-      // Set safe default values on error
       setIsSignedIn(false);
       setSignInTime(null);
     }
@@ -128,32 +138,34 @@ const InternDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get current month's data
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
 
-      const { data: monthlyRecord } = await supabase
+      const { data: monthlyRecord, error: monthlyError } = await supabase
         .from('monthly_salary_history')
         .select('total_hours, total_salary')
         .eq('user_id', user.id)
         .eq('month', month)
         .eq('year', year)
-        .single();
+        .maybeSingle(); // Use maybeSingle as record might not exist
+
+      if (monthlyError && monthlyError.code !== 'PGRST116') throw monthlyError;
 
       if (monthlyRecord) {
-        setHoursWorked(monthlyRecord.total_hours);
-        setCurrentMonthSalary(monthlyRecord.total_salary);
+        setHoursWorked(monthlyRecord.total_hours || 0); // Ensure fallback to 0 if null
+        setCurrentMonthSalary(monthlyRecord.total_salary || 0); // Ensure fallback to 0 if null
       } else {
-        // Initialize with zero values if no record exists for the current month
         setHoursWorked(0);
         setCurrentMonthSalary(0);
       }
 
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching total hours:', error);
-      setLoading(false);
+      setHoursWorked(0); // Set defaults on error
+      setCurrentMonthSalary(0);
+    } finally {
+      setLoading(false); // Set loading to false after all essential data is fetched or attempted
     }
   };
 
@@ -174,91 +186,98 @@ const InternDashboard = () => {
     );
   }
 
-  const progressPercentage = (hoursWorked / requiredHours) * 100;
+  const progressPercentage = requiredHours > 0 ? (hoursWorked / requiredHours) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">
-              Hi, {internName}!
-            </h1>
-            <p className="text-slate-400">Track your internship progress</p>
+        <div className="flex items-center justify-between mb-6 bg-slate-800/30 backdrop-blur-md rounded-lg shadow-lg p-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10 border-2 border-blue-500">
+              <AvatarImage src={internAvatar} alt={internName} />
+              <AvatarFallback className="bg-blue-600 text-white">
+                {internName?.charAt(0).toUpperCase() || internEmail?.charAt(0).toUpperCase() || 'I'}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">
+                Hi, {internName || 'Intern'}!
+              </h1>
+              <p className="text-slate-400">Track your internship progress</p>
+            </div>
           </div>
           <Button 
             variant="ghost" 
             onClick={handleLogout}
             className="text-slate-400 hover:text-white"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-5 h-5" />
           </Button>
         </div>
 
         {/* Progress Card */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-white">Hours Progress</CardTitle>
             <CardDescription className="text-slate-400">
-              Total hours completed towards requirement
+              Total hours completed: {hoursWorked.toFixed(2)} / {requiredHours}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Progress value={progressPercentage} className="h-2" />
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">
-                {hoursWorked.toFixed(2)} hours completed
-              </span>
-              <span className="text-slate-400">
-                {requiredHours} hours required
-              </span>
+            <Progress value={progressPercentage} className="h-3 rounded-full bg-slate-700" /> 
+            {/* Removed explicit indicator class, rely on default Progress styling or customize via its own props/variant */}
+            <div className="flex justify-between text-sm text-slate-400">
+              <span>{hoursWorked.toFixed(2)} hours</span>
+              <span>{requiredHours} hours</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Time Tracking Card */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-white">Time Tracking</CardTitle>
             <CardDescription className="text-slate-400">
               {isSignedIn 
-                ? `Signed in at ${new Date(signInTime!).toLocaleTimeString()}`
-                : "Not currently signed in"
-              }
+                ? `Signed in since: ${signInTime ? new Date(signInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}` 
+                : "You are currently signed out."}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button 
               onClick={() => setShowScanner(true)}
-              className="w-full"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 ease-in-out"
+              disabled={showScanner} 
             >
-              <QrCode className="w-4 h-4 mr-2" />
-              {isSignedIn ? "Scan to Time Out" : "Scan to Time In"}
+              <QrCode className="w-5 h-5 mr-2" />
+              {isSignedIn ? "Time Out" : "Time In"}
             </Button>
           </CardContent>
         </Card>
 
         {/* Monthly Earnings Card */}
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-white">Monthly Earnings</CardTitle>
             <CardDescription className="text-slate-400">
-              Current month's earnings based on hours worked
+              Your estimated salary for the current month.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <p className="text-3xl font-bold text-green-400">
               ₱{currentMonthSalary.toFixed(2)}
-            </div>
-            <p className="text-sm text-slate-400">
-              Based on ₱200 per 8 hours
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              Based on {hoursWorked.toFixed(2)} hours completed this month.
             </p>
           </CardContent>
         </Card>
 
         {showScanner && (
-          <QRScanner onClose={() => setShowScanner(false)} />
+          <QRScanner 
+            onClose={() => setShowScanner(false)} 
+          />
         )}
       </div>
     </div>

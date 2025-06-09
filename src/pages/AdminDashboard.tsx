@@ -1,17 +1,29 @@
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, QrCode, Users, Calendar, DollarSign, FileText } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import QRGenerator from "@/components/QRGenerator";
-import MonthlySummary from "@/components/MonthlySummary";
-import UserStatusLog from "@/components/UserStatusLog";
-import MonthlySalaryHistory from "@/components/MonthlySalaryHistory";
-import DailyLogs from "@/components/DailyLogs";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  LayoutDashboard,
+  QrCode,
+  ListChecks,
+  CalendarDays,
+  History,
+  Users,
+  LogOut,
+  Menu,
+  X,
+} from "lucide-react";
+
+// Import dashboard components
 import RecentActivity from "@/components/RecentActivity";
+import QRGenerator from "@/components/QRGenerator";
+import DailyLogs from "@/components/DailyLogs";
+import MonthlySummary from "@/components/MonthlySummary";
+import MonthlySalaryHistory from "@/components/MonthlySalaryHistory";
+import UserStatusLog from "@/components/UserStatusLog";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -19,22 +31,28 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const isMobile = useIsMobile(); // Use the hook
+  const [mobileNavOpen, setMobileNavOpen] = useState(false); // State for mobile nav
+  const [adminName, setAdminName] = useState("Admin"); // Default admin name
+  const [adminAvatar, setAdminAvatar] = useState(""); // Default or no avatar
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (error || !session) {
+      if (sessionError || !session) {
         navigate('/');
         return;
       }
       
-      // Verify if user is admin by checking email
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email?.includes('admin')) {
         navigate('/');
         return;
       }
+      
+      // Removed fetching from admin_profiles as per user's plan for a single admin account
+      // Admin name is already defaulted via useState
       
       setIsAdmin(true);
       setLoading(false);
@@ -70,99 +88,113 @@ const AdminDashboard = () => {
     return null;
   }
 
+  const navItems = [
+    { value: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4 mr-2" /> },
+    { value: "qr-generator", label: "QR Generator", icon: <QrCode className="w-4 h-4 mr-2" /> },
+    { value: "daily-logs", label: "Daily Logs", icon: <ListChecks className="w-4 h-4 mr-2" /> },
+    { value: "monthly-summary", label: "Monthly Summary", icon: <CalendarDays className="w-4 h-4 mr-2" /> },
+    { value: "salary-history", label: "Salary History", icon: <History className="w-4 h-4 mr-2" /> },
+    { value: "user-status", label: "User Status", icon: <Users className="w-4 h-4 mr-2" /> },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 flex flex-col">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5"></div>
       
-      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 relative z-10">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">Admin Dashboard</h1>
-            <p className="text-slate-400">Welcome, Admin.</p>
-          </div>
-          <div className="flex items-center justify-between sm:justify-end gap-4">
-            <div className="text-left sm:text-right">
-              <div className="text-white font-semibold text-sm sm:text-base">{currentTime.toLocaleTimeString()}</div>
-              <div className="text-slate-400 text-xs sm:text-sm">{currentTime.toLocaleDateString()}</div>
+      {/* Header */}
+      <header className="max-w-full mx-auto w-full mb-4 sm:mb-6 relative z-10 bg-slate-800/30 backdrop-blur-md rounded-lg shadow-lg p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10 border-2 border-blue-500">
+              <AvatarImage src={adminAvatar} alt={adminName} />
+              <AvatarFallback className="bg-blue-600 text-white">
+                {adminName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">Admin Dashboard</h1>
+              <p className="text-slate-400 text-sm">Welcome, {adminName}.</p>
             </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {isMobile && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setMobileNavOpen(!mobileNavOpen)}
+                className="text-slate-400 hover:text-white md:hidden"
+              >
+                {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </Button>
+            )}
             <Button 
               variant="ghost" 
-              size="sm" 
+              size="icon" 
               onClick={handleLogout}
-              className="text-slate-400 hover:text-white shrink-0"
+              className="text-slate-400 hover:text-white"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-5 h-5" />
             </Button>
           </div>
         </div>
+      </header>
 
-        {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          {/* Mobile Navigation Dropdown */}
-          <div className="block sm:hidden">
-            <Select value={activeTab} onValueChange={setActiveTab}>
-              <SelectTrigger className="w-full bg-slate-800/50 border-slate-700 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="overview">🏠 Home</SelectItem>
-                <SelectItem value="qr-generator">📱 QR Generator</SelectItem>
-                <SelectItem value="daily-logs">📅 Daily Logs</SelectItem>
-                <SelectItem value="monthly-summary">📄 Monthly Summary</SelectItem>
-                <SelectItem value="salary-history">💰 Salary History</SelectItem>
-                <SelectItem value="user-status">👥 User Status</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Mobile Navigation Drawer/Panel */}
+      {isMobile && mobileNavOpen && (
+        <div className="fixed inset-0 z-40 bg-slate-900/80 backdrop-blur-sm md:hidden" onClick={() => setMobileNavOpen(false)}>
+          <div className="fixed top-0 left-0 h-full w-64 bg-slate-800 p-4 shadow-xl z-50" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-white">Navigation</h2>
+              <Button variant="ghost" size="icon" onClick={() => setMobileNavOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <nav className="flex flex-col space-y-2">
+              {navItems.map((item) => (
+                <Button
+                  key={item.value}
+                  variant={activeTab === item.value ? "secondary" : "ghost"}
+                  onClick={() => {
+                    setActiveTab(item.value);
+                    setMobileNavOpen(false);
+                  }}
+                  className="w-full justify-start text-white"
+                >
+                  {item.icon}
+                  {item.label}
+                </Button>
+              ))}
+            </nav>
           </div>
+        </div>
+      )}
 
+      {/* Main Content Area */}
+      <main className="max-w-full mx-auto w-full flex-grow relative z-10">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           {/* Desktop Navigation Tabs */}
-          <TabsList className="hidden sm:grid w-full grid-cols-3 lg:grid-cols-6 bg-slate-800/50 border-slate-700 h-auto p-1 gap-1">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs sm:text-sm px-1 sm:px-2 py-2 flex-shrink-0 min-w-0">
-              <Users className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
-              <span className="truncate">Overview</span>
-            </TabsTrigger>
-            <TabsTrigger value="qr-generator" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs sm:text-sm px-1 sm:px-2 py-2 flex-shrink-0 min-w-0">
-              <QrCode className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
-              <span className="truncate">QR Generator</span>
-            </TabsTrigger>
-            <TabsTrigger value="daily-logs" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs sm:text-sm px-1 sm:px-2 py-2 flex-shrink-0 min-w-0">
-              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
-              <span className="truncate">Daily Logs</span>
-            </TabsTrigger>
-            <TabsTrigger value="monthly-summary" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs sm:text-sm px-1 sm:px-2 py-2 flex-shrink-0 min-w-0 lg:flex hidden">
-              <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
-              <span className="truncate">Monthly Summary</span>
-            </TabsTrigger>
-            <TabsTrigger value="salary-history" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs sm:text-sm px-1 sm:px-2 py-2 flex-shrink-0 min-w-0 lg:flex hidden">
-              <DollarSign className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
-              <span className="truncate">Salary History</span>
-            </TabsTrigger>
-            <TabsTrigger value="user-status" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-xs sm:text-sm px-1 sm:px-2 py-2 flex-shrink-0 min-w-0 lg:flex hidden">
-              <Users className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
-              <span className="truncate">User Status</span>
-            </TabsTrigger>
-          </TabsList>
+          {!isMobile && (
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 bg-slate-800/50 border-slate-700 h-auto p-1 gap-1">
+              {navItems.map((item) => (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                >
+                  {item.icon}
+                  {item.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          )}
 
           <TabsContent value="overview" className="space-y-6">
             <RecentActivity />
           </TabsContent>
 
           <TabsContent value="qr-generator">
-            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <QrCode className="w-5 h-5" />
-                  QR Code Generator
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Generate secure QR codes that expire every 5 seconds
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex justify-center">
-                <QRGenerator />
-              </CardContent>
-            </Card>
+            <QRGenerator />
           </TabsContent>
 
           <TabsContent value="daily-logs">
@@ -181,7 +213,7 @@ const AdminDashboard = () => {
             <UserStatusLog />
           </TabsContent>
         </Tabs>
-      </div>
+      </main>
     </div>
   );
 };

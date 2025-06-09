@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Clock, DollarSign, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface InternStatus {
   id: string;
@@ -72,15 +73,22 @@ const UserStatusLog = () => {
 
           // Check if user is currently online (has time_in but no time_out today)
           const today = new Date().toISOString().split('T')[0];
-          const { data: todayLog } = await supabase
+          const { data: latestTodayLog, error: latestTodayLogError } = await supabase
             .from('time_logs')
             .select('time_in, time_out')
             .eq('user_id', profile.user_id)
             .eq('date', today)
-            .single();
+            .order('created_at', { ascending: false }) // Get the latest log for the day
+            .limit(1)
+            .maybeSingle(); // Use maybeSingle to handle cases where there's no log for today
+
+          // Optional: Log error if fetching latest log fails
+          // if (latestTodayLogError) {
+          //   console.error(`Error fetching latest log for ${profile.name}:`, latestTodayLogError);
+          // }
 
           let isOnline = false;
-          if (todayLog && todayLog.time_in && !todayLog.time_out) {
+          if (latestTodayLog && latestTodayLog.time_in && !latestTodayLog.time_out) {
             isOnline = true;
           }
 
@@ -102,10 +110,10 @@ const UserStatusLog = () => {
             name: profile.name,
             email: profile.email,
             required_hours: profile.required_hours,
-            completed_hours: completedHours,
-            status: progressStatus,
-            is_online: isOnline,
-            last_activity: recentActivity?.time_in || null
+            completed_hours: completedHours, // This was missing, ensure it's defined from your existing logic
+            status: progressStatus, 
+            is_online: isOnline, 
+            last_activity: recentActivity?.time_in || null // This was missing, ensure it's defined
           };
         })
       );
@@ -133,8 +141,15 @@ const UserStatusLog = () => {
   if (loading) {
     return (
       <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-        <CardContent className="p-6">
-          <div className="text-white">Loading intern data...</div>
+        <CardHeader>
+          <CardTitle>User Status Log</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
         </CardContent>
       </Card>
     );
@@ -142,90 +157,49 @@ const UserStatusLog = () => {
 
   return (
     <div className="space-y-6">
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                User Status Log
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                Total Interns: {totalInterns}
-              </CardDescription>
-            </div>
-          </div>
+          <CardTitle>User Status Log ({totalInterns} Interns)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {interns.map((intern, index) => {
-              const progressPercentage = (intern.completed_hours / intern.required_hours) * 100;
-              const hoursLeft = Math.max(0, intern.required_hours - intern.completed_hours);
-              const salary = calculateSalary(intern.completed_hours);
-              
-              return (
-                <div key={index} className="bg-slate-700/30 rounded-lg p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-white font-semibold">{intern.name}</h3>
-                      <p className="text-slate-400 text-sm">{intern.email}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        intern.is_online 
-                          ? "bg-green-500/20 text-green-400" 
-                          : "bg-slate-500/20 text-slate-400"
-                      }`}>
-                        {intern.is_online ? "Online" : "Offline"}
-                      </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        intern.status === "Completed" 
-                          ? "bg-blue-500/20 text-blue-400" 
-                          : "bg-yellow-500/20 text-yellow-400"
-                      }`}>
-                        {intern.status}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-slate-300">
-                        <Clock className="w-4 h-4" />
-                        <span className="text-sm font-medium">Hours Progress</span>
-                      </div>
-                      <Progress value={progressPercentage} className="h-2" />
-                      <div className="flex justify-between text-xs">
-                        <span className="text-blue-400">{intern.completed_hours}h completed</span>
-                        <span className="text-slate-400">{hoursLeft}h left</span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="text-slate-400 text-sm">Required Hours</div>
-                      <div className="text-white font-semibold">{intern.required_hours}h</div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-slate-400 text-sm">
-                        <DollarSign className="w-4 h-4" />
-                        Salary Earned
-                      </div>
-                      <div className="text-green-400 font-semibold">₱{salary.toLocaleString()}</div>
-                      <div className="text-xs text-slate-400">
-                        {Math.floor(intern.completed_hours / 8)} × 8hr blocks
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {interns.length === 0 && (
-              <div className="text-center py-8 text-slate-400">
-                No intern data available
-              </div>
-            )}
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Online Status</TableHead>
+                <TableHead>Progress Status</TableHead>
+                <TableHead>Completed Hours</TableHead>
+                <TableHead>Required Hours</TableHead>
+                <TableHead>Last Activity</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {interns.map((intern) => (
+                <TableRow key={intern.id}>
+                  <TableCell className="font-medium">{intern.name}</TableCell>
+                  <TableCell>{intern.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={intern.is_online ? "default" : "outline"}> {/* Changed "success" to "default" */}
+                      {intern.is_online ? "Online" : "Offline"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={intern.status === "Completed" ? "default" : "secondary"}>
+                      {intern.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{intern.completed_hours.toFixed(2)}</TableCell>
+                  <TableCell>{intern.required_hours}</TableCell>
+                  <TableCell>
+                    {intern.last_activity 
+                      ? new Date(intern.last_activity).toLocaleString() 
+                      : "N/A"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

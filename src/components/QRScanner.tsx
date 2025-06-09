@@ -5,6 +5,7 @@ import { X, Scan, Camera, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import QrScanner from "qr-scanner";
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 interface QRScannerProps {
   onClose: () => void;
@@ -20,6 +21,7 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
   const streamRef = useRef<MediaStream | null>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate(); // Initialize useNavigate
 
   useEffect(() => {
     // Check if camera is available and request permissions
@@ -97,14 +99,17 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
       
       // Cleanup any existing scanner first
       if (qrScannerRef.current) {
-        qrScannerRef.current.destroy();
+        try {
+          (qrScannerRef.current as QrScanner).destroy();
+        } catch (error) {
+          console.error('Error destroying existing QR scanner during start:', error);
+        }
         qrScannerRef.current = null;
       }
       
       // Get camera stream with fallback constraints
       let stream;
       try {
-        // Try back camera first (mobile)
         console.log('Attempting to access back camera...');
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
@@ -114,7 +119,6 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
           } 
         });
       } catch (err) {
-        // Fallback to any available camera
         console.log('Back camera failed, trying any camera...');
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
@@ -125,13 +129,15 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
       }
       
       console.log('Camera stream obtained:', stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
       streamRef.current = stream;
-      videoRef.current.srcObject = stream;
       setPermissionGranted(true);
       
       // Wait for video to be ready and actually start playing
       console.log('Waiting for video to load...');
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           console.error('Video load timeout');
           reject(new Error('Video load timeout'));
@@ -140,20 +146,22 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
         const onLoadedMetadata = () => {
           console.log('Video metadata loaded, starting playback...');
           clearTimeout(timeout);
-          videoRef.current!.removeEventListener('loadedmetadata', onLoadedMetadata);
-          videoRef.current!.removeEventListener('canplay', onCanPlay);
-          
-          // Force video to play
-          videoRef.current!.play()
-            .then(() => {
-              console.log('Video is now playing');
-              setTimeout(() => resolve(void 0), 500); // Small delay to ensure video is actually playing
-            })
-            .catch((playError) => {
-              console.error('Video play error:', playError);
-              // Still resolve as camera access is working
-              setTimeout(() => resolve(void 0), 500);
-            });
+          if (videoRef.current) {
+            videoRef.current.removeEventListener('loadedmetadata', onLoadedMetadata);
+            videoRef.current.removeEventListener('canplay', onCanPlay);
+            videoRef.current.play()
+              .then(() => {
+                console.log('Video is now playing');
+                setTimeout(() => resolve(), 500); // Small delay to ensure video is actually playing
+              })
+              .catch((playError) => {
+                console.error('Video play error:', playError);
+                // Still resolve as camera access is working for some cases, or reject if critical
+                setTimeout(() => resolve(), 500); 
+              });
+          } else {
+            reject(new Error("videoRef.current is null in onLoadedMetadata"));
+          }
         };
         
         const onCanPlay = () => {
@@ -161,72 +169,63 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
           onLoadedMetadata();
         };
         
-        if (videoRef.current!.readyState >= 2) {
-          // Video is already loaded
-          onLoadedMetadata();
+        if (videoRef.current) {
+          if (videoRef.current.readyState >= 2) { // HAVE_CURRENT_DATA or more
+            onLoadedMetadata();
+          } else {
+            videoRef.current.addEventListener('loadedmetadata', onLoadedMetadata);
+            videoRef.current.addEventListener('canplay', onCanPlay);
+          }
         } else {
-          videoRef.current!.addEventListener('loadedmetadata', onLoadedMetadata);
-          videoRef.current!.addEventListener('canplay', onCanPlay);
+           reject(new Error("videoRef.current is null before event listeners"));
         }
       });
       
       // Initialize QR Scanner
       console.log('Initializing QR Scanner...');
-      if (qrScannerRef.current) {
-        try {
-          (qrScannerRef.current as QrScanner).destroy();
-        } catch (error) {
-          console.error('Error destroying existing QR scanner:', error);
-        }
-      }
-      
-      // Set worker path for QR scanner
+      // Ensure worker path is correctly set (assuming it's in public folder)
       QrScanner.WORKER_PATH = '/qr-scanner-worker.min.js';
       
-      qrScannerRef.current = new QrScanner(
-        videoRef.current,
-        (result) => {
-          const qrData = typeof result === 'string' ? result : result.data;
-          console.log('QR Code detected:', qrData);
-          handleScan(qrData);
-        },
-        {
-          returnDetailedScanResult: false,
-          highlightScanRegion: true,
-          highlightCodeOutline: true,
-          maxScansPerSecond: 5,
-        }
-      );
+      if (videoRef.current) {
+        qrScannerRef.current = new QrScanner(
+          videoRef.current, 
+          (result) => {
+            const qrData = typeof result === 'string' ? result : result.data;
+            console.log('QR Code detected:', qrData);
+            handleScan(qrData); 
+          },
+          {
+            returnDetailedScanResult: true, 
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            maxScansPerSecond: 2, 
+          }
+        );
       
-      await qrScannerRef.current.start();
-      
-      toast({
-        title: "Camera Active",
-        description: "Point your camera at a QR code to scan",
-      });
+        await qrScannerRef.current.start();
+        console.log('QR Scanner started.');
+        toast({
+          title: "Camera Active",
+          description: "Point your camera at a QR code to scan.",
+        });
+      } else {
+        throw new Error("videoRef.current is null before initializing QrScanner");
+      }
       
     } catch (err: any) {
       console.error('Error starting scanner:', err);
-      setIsScanning(false);
+      setError(err.message || 'Failed to start camera.');
+      setIsScanning(false); 
       
       let errorMessage = 'Failed to start camera';
       if (err.name === 'NotAllowedError') {
-        errorMessage = 'Camera permission denied. Please allow camera access and try again.';
-        setPermissionGranted(false);
+        errorMessage = 'Camera permission denied. Please allow camera access in your browser settings.';
       } else if (err.name === 'NotFoundError') {
-        errorMessage = 'No camera found on this device.';
-        setHasCamera(false);
-      } else if (err.name === 'NotSupportedError') {
-        errorMessage = 'Camera not supported in this browser. Try using a different browser.';
-      } else if (err.name === 'NotReadableError') {
-        errorMessage = 'Camera is already in use by another application.';
-      } else if (err.name === 'OverconstrainedError') {
-        errorMessage = 'Camera constraints could not be satisfied.';
-      } else if (err.name === 'SecurityError') {
-        errorMessage = 'Camera access blocked by security settings.';
+        errorMessage = 'No camera found. Please ensure a camera is connected and enabled.';
+      } else if (err.message) {
+        errorMessage = err.message;
       }
       
-      setError(errorMessage);
       toast({
         title: "Camera Error",
         description: errorMessage,
@@ -235,107 +234,143 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
     }
   };
 
-  const handleManualScan = () => {
-    // Generate realistic QR code data for demo purposes
-    const timestamp = Date.now();
-    const dateStr = new Date().toISOString().split('T')[0];
-    const qrData = JSON.stringify({
-      type: "attendance",
-      location: "Office",
-      timestamp: timestamp,
-      date: dateStr,
-      id: Math.random().toString(36).substr(2, 9)
-    });
-    
-    toast({
-      title: "QR Code Detected",
-      description: "Processing attendance data...",
-    });
-    
-    handleScan(qrData);
-  };
-
   const handleScan = async (qrData: string) => {
     if (scanInProgress) return;
     setScanInProgress(true);
 
-    // Pause scanning while processing (don't completely stop)
     if (qrScannerRef.current) {
       try {
-        (qrScannerRef.current as QrScanner).pause();
+        qrScannerRef.current.pause(); // Corrected: pause takes no arguments
+        console.log('QR Scanner paused for processing.');
       } catch (error) {
         console.error('Error pausing QR scanner:', error);
       }
     }
 
     try {
+      if (!qrData || !qrData.startsWith("attendance-")) {
+        toast({
+          title: "Invalid QR Code",
+          description: "This QR code is not a valid attendance code.",
+          variant: "destructive",
+        });
+        return; 
+      }
+      
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        toast({
+          title: "Authentication Error",
+          description: "You must be logged in to record attendance.",
+          variant: "destructive",
+        });
+        navigate('/'); 
+        return; 
+      }
 
       const now = new Date();
       const today = now.toISOString().split('T')[0];
+      const currentTime = now.toTimeString().split(' ')[0]; // HH:MM:SS
 
-      // Check for existing time log today
-      const { data: existingLog } = await supabase
+      const { data: existingLog, error: fetchError } = await supabase
         .from('time_logs')
-        .select('*')
+        .select('id, time_in, time_out, date')
         .eq('user_id', user.id)
         .eq('date', today)
         .single();
 
+      if (fetchError && fetchError.code !== 'PGRST116') { 
+        console.error("Error fetching existing log:", fetchError);
+        throw new Error(fetchError.message || "Could not fetch existing log.");
+      }
+
       if (!existingLog) {
         // Time in
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from('time_logs')
           .insert({
             user_id: user.id,
             date: today,
-            time_in: now.toISOString(),
+            time_in: currentTime,
           });
-
-        if (error) throw error;
-
+        if (insertError) {
+          console.error("Error inserting time_in:", insertError);
+          throw new Error(insertError.message || "Failed to record time-in.");
+        }
         toast({
-          title: "Time In Recorded",
-          description: `Clocked in at ${now.toLocaleTimeString()}`,
+          title: "Time In Successful",
+          description: `You have successfully timed in at ${currentTime}.`,
         });
-      } else if (!existingLog.time_out) {
+      } else if (existingLog.time_in && !existingLog.time_out) {
         // Time out
-        const timeIn = new Date(existingLog.time_in!);
-        const totalHours = (now.getTime() - timeIn.getTime()) / (1000 * 60 * 60);
+        const timeInDate = new Date(`${existingLog.date}T${existingLog.time_in}`);
+        const timeOutDate = now;
+        const diffMilliseconds = timeOutDate.getTime() - timeInDate.getTime();
+        
+        if (diffMilliseconds < 0) {
+          toast({
+            title: "Time Out Error",
+            description: "Time-out cannot be earlier than time-in. Please check system time.",
+            variant: "destructive",
+          });
+          return; 
+        }
 
-        const { error } = await supabase
+        const hoursWorked = parseFloat((diffMilliseconds / (1000 * 60 * 60)).toFixed(2));
+
+        const { error: updateError } = await supabase
           .from('time_logs')
-          .update({ 
-            time_out: now.toISOString(),
-            total_hours: totalHours
-          })
+          .update({ time_out: currentTime, total_hours: hoursWorked })
           .eq('id', existingLog.id);
 
-        if (error) throw error;
-
+        if (updateError) {
+          console.error("Error updating time_out:", updateError);
+          throw new Error(updateError.message || "Failed to record time-out.");
+        }
         toast({
-          title: "Time Out Recorded",
-          description: `Clocked out at ${now.toLocaleTimeString()}. Hours worked: ${totalHours.toFixed(2)}`,
+          title: "Time Out Successful",
+          description: `You have successfully timed out at ${currentTime}. Hours worked: ${hoursWorked.toFixed(2)}.`
+        });
+      } else if (existingLog.time_in && existingLog.time_out) {
+        // Already timed in and out
+        toast({
+          title: "Attendance Recorded",
+          description: "You have already timed in and out for today.",
+          variant: "default", 
         });
       } else {
-        toast({
-          title: "Already Timed Out",
-          description: "You have already completed your time for today.",
-          variant: "destructive"
+         console.warn("Unexpected time log state:", existingLog);
+         toast({
+          title: "Unknown Attendance State",
+          description: "Could not determine your current time-in/out status. Please contact support if this persists.",
+          variant: "destructive",
         });
       }
 
-      onClose();
     } catch (error: any) {
-      console.error('Error handling scan:', error);
+      console.error('Error processing scan:', error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to record time",
-        variant: "destructive"
+        title: "Scan Processing Error",
+        description: error.message || "An unexpected error occurred while processing the scan.",
+        variant: "destructive",
       });
     } finally {
       setScanInProgress(false);
+      setTimeout(() => {
+        if (qrScannerRef.current && isScanning && videoRef.current) { 
+          try {
+            if (videoRef.current.srcObject && (videoRef.current.srcObject as MediaStream).active) {
+              qrScannerRef.current.start().then(() => {
+                console.log('QR Scanner restarted after processing.');
+              }).catch(e => console.error("Error restarting scanner after processing:", e));
+            } else {
+              console.log("Video stream inactive, not restarting scanner immediately.");
+            }
+          } catch(e) {
+            console.error("Error trying to restart scanner:", e);
+          }
+        }
+      }, 1500); 
     }
   };
 
@@ -379,14 +414,6 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
                   Camera not supported or available on this device
                 </p>
               </div>
-              <Button
-                onClick={handleManualScan}
-                className="w-full bg-green-600 hover:bg-green-500"
-                disabled={scanInProgress}
-              >
-                {scanInProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Manual Check-in (Demo)
-              </Button>
             </div>
           ) : error ? (
             <div className="text-center space-y-4">
@@ -405,14 +432,6 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
                   disabled={scanInProgress}
                 >
                   Retry Camera
-                </Button>
-                <Button
-                  onClick={handleManualScan}
-                  className="flex-1 bg-green-600 hover:bg-green-500"
-                  disabled={scanInProgress}
-                >
-                  {scanInProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Manual Demo
                 </Button>
               </div>
             </div>
@@ -450,14 +469,6 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
                 >
                   Stop Camera
                 </Button>
-                <Button
-                  onClick={handleManualScan}
-                  className="flex-1 bg-green-600 hover:bg-green-500"
-                  disabled={scanInProgress}
-                >
-                  {scanInProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Manual Scan (Demo)
-                </Button>
               </div>
             </div>
           ) : (
@@ -478,15 +489,6 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
               >
                 <Camera className="w-4 h-4 mr-2" />
                 Start Camera
-              </Button>
-              <Button
-                onClick={handleManualScan}
-                variant="outline"
-                className="w-full border-slate-600 text-slate-300 hover:bg-slate-800"
-                disabled={scanInProgress}
-              >
-                {scanInProgress && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Manual Check-in (Demo)
               </Button>
             </div>
           )}
