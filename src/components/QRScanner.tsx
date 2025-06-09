@@ -91,8 +91,10 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Get authenticated user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error("handleScan: User authentication error:", userError);
         toast({ 
           title: "Authentication Error", 
           description: "You must be logged in to record attendance.", 
@@ -101,25 +103,37 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         return;
       }
 
+      console.log(`handleScan: User authenticated: ${user.id}`);
       const today = getLocalDateString();
+      console.log(`handleScan: Date for query: ${today}`);
+
+      // Fetch existing time log for today with detailed error logging
       const { data: existingLog, error: fetchError } = await supabase
         .from('time_logs')
-        .select('id, time_in, time_out')
+        .select('id, time_in, time_out, date, user_id')
         .eq('user_id', user.id)
         .eq('date', today)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (fetchError) {
         console.error("handleScan: Error fetching existing time log:", fetchError);
+        console.error("Error code:", fetchError.code);
+        console.error("Error message:", fetchError.message);
+        console.error("Error details:", fetchError.details);
         toast({ 
           title: "Database Error", 
-          description: "Could not check existing logs.", 
+          description: `Could not check existing logs: ${fetchError.message}`, 
           variant: "destructive" 
         });
         return;
       }
 
+      console.log(`handleScan: Existing log found:`, existingLog);
+
       if (existingLog) {
+        // Check if both time_in and time_out are already recorded
         if (existingLog.time_in && existingLog.time_out) {
           toast({ 
             title: "Already Complete", 
@@ -128,20 +142,36 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
           });
           onClose();
           return;
-        } else if (existingLog.time_in && !existingLog.time_out) {
-          // Time out
-          const { error: updateError } = await supabase
+        } 
+        
+        // Check if only time_in exists (need to record time_out)
+        if (existingLog.time_in && !existingLog.time_out) {
+          console.log(`handleScan: Recording time out for log ID: ${existingLog.id}`);
+          const timeOutTimestamp = new Date().toISOString();
+          
+          // Update with time_out using explicit WHERE conditions
+          const { data: updateData, error: updateError } = await supabase
             .from('time_logs')
-            .update({ time_out: new Date().toISOString() })
-            .eq('id', existingLog.id);
+            .update({ 
+              time_out: timeOutTimestamp,
+              updated_at: timeOutTimestamp
+            })
+            .eq('id', existingLog.id)
+            .eq('user_id', user.id) // Additional security check
+            .select('*');
 
           if (updateError) {
+            console.error("handleScan: Time out update error:", updateError);
+            console.error("Update error code:", updateError.code);
+            console.error("Update error message:", updateError.message);
+            console.error("Update error details:", updateError.details);
             toast({ 
               title: "Time Out Error", 
-              description: "Failed to record your time out.", 
+              description: `Failed to record your time out: ${updateError.message || 'Unknown error'}`, 
               variant: "destructive" 
             });
           } else {
+            console.log("handleScan: Time out recorded successfully:", updateData);
             toast({ 
               title: "Time Out Successful", 
               description: "You have successfully timed out.", 
@@ -149,37 +179,50 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             });
             onClose();
           }
-        }
-      } else {
-        // Time in
-        const { error: insertError } = await supabase
-          .from('time_logs')
-          .insert({ 
-            user_id: user.id, 
-            date: today, 
-            time_in: new Date().toISOString() 
-          });
-
-        if (insertError) {
-          toast({ 
-            title: "Time In Error", 
-            description: "Failed to record your time in.", 
-            variant: "destructive" 
-          });
-        } else {
-          toast({ 
-            title: "Time In Successful", 
-            description: "You have successfully timed in.", 
-            variant: "default" 
-          });
-          onClose();
+          return;
         }
       }
+
+      // No existing log or incomplete log - record time_in
+      console.log(`handleScan: Recording time in for user: ${user.id}`);
+      const timeInTimestamp = new Date().toISOString();
+      
+      const { data: insertData, error: insertError } = await supabase
+        .from('time_logs')
+        .insert({ 
+          user_id: user.id, 
+          date: today, 
+          time_in: timeInTimestamp,
+          created_at: timeInTimestamp,
+          updated_at: timeInTimestamp
+        })
+        .select('*');
+
+      if (insertError) {
+        console.error("handleScan: Time in insert error:", insertError);
+        console.error("Insert error code:", insertError.code);
+        console.error("Insert error message:", insertError.message);
+        console.error("Insert error details:", insertError.details);
+        toast({ 
+          title: "Time In Error", 
+          description: `Failed to record your time in: ${insertError.message || 'Unknown error'}`, 
+          variant: "destructive" 
+        });
+      } else {
+        console.log("handleScan: Time in recorded successfully:", insertData);
+        toast({ 
+          title: "Time In Successful", 
+          description: "You have successfully timed in.", 
+          variant: "default" 
+        });
+        onClose();
+      }
+
     } catch (e) {
       console.error("handleScan: Unexpected error:", e);
       toast({ 
         title: "Scan Processing Error", 
-        description: "An unexpected error occurred.", 
+        description: `An unexpected error occurred: ${e instanceof Error ? e.message : 'Unknown error'}`, 
         variant: "destructive" 
       });
     } finally {
