@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getLocalDateString } from "@/lib/dateUtils";
 
 interface InternStatus {
   id: string;
@@ -72,7 +73,7 @@ const UserStatusLog = () => {
           let completedHours = monthlyRecord?.total_hours || 0;
 
           // Check if user is currently online (has time_in but no time_out today)
-          const today = new Date().toISOString().split('T')[0];
+          const today = getLocalDateString();
           const { data: latestTodayLog, error: latestTodayLogError } = await supabase
             .from('time_logs')
             .select('time_in, time_out')

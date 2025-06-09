@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { LogOut, QrCode } from "lucide-react";
 import QRScanner from "@/components/QRScanner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getLocalDateString, getCurrentMonth, getCurrentYear } from "@/lib/dateUtils";
 
 const InternDashboard = () => {
   const navigate = useNavigate();
@@ -105,7 +106,7 @@ const InternDashboard = () => {
         return;
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const { data: timeLog, error } = await supabase
         .from('time_logs')
         .select('*')
@@ -138,9 +139,8 @@ const InternDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
+      const month = getCurrentMonth();
+      const year = getCurrentYear();
 
       const { data: monthlyRecord, error: monthlyError } = await supabase
         .from('monthly_salary_history')
@@ -236,23 +236,44 @@ const InternDashboard = () => {
 
         {/* Time Tracking Card */}
         <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-white">Time Tracking</CardTitle>
-            <CardDescription className="text-slate-400">
-              {isSignedIn 
-                ? `Signed in since: ${signInTime ? new Date(signInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}` 
-                : "You are currently signed out."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              onClick={() => setShowScanner(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 ease-in-out"
-              disabled={showScanner} 
-            >
-              <QrCode className="w-5 h-5 mr-2" />
-              {isSignedIn ? "Time Out" : "Time In"}
-            </Button>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              {/* Status indicator */}
+              <div className="text-center">
+                {isSignedIn ? (
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                      <span className="text-green-400 text-sm font-medium">Currently signed in</span>
+                    </div>
+                    {signInTime && (
+                      <p className="text-xs text-slate-400">
+                        Signed in at {new Date(signInTime).toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-500/10 border border-slate-500/20">
+                    <div className="w-2 h-2 bg-slate-500 rounded-full mr-2"></div>
+                    <span className="text-slate-400 text-sm font-medium">Currently signed out</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Dynamic QR scan button */}
+              <Button 
+                onClick={() => setShowScanner(true)}
+                className={`w-full font-semibold py-3 rounded-lg shadow-md transition duration-150 ease-in-out ${
+                  isSignedIn 
+                    ? "bg-red-600 hover:bg-red-700 text-white" 
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
+                disabled={showScanner} 
+              >
+                <QrCode className="w-5 h-5 mr-2" />
+                {isSignedIn ? "Time Out" : "Time In"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

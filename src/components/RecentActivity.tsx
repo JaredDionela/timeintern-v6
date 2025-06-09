@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Clock, ArrowRight, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { getLocalDateString } from "@/lib/dateUtils";
 
 interface ActivityLog {
   id: string;
@@ -40,10 +41,9 @@ const RecentActivity = () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
   const fetchTodaysActivity = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       
       const { data: timeLogsData, error: timeLogsError } = await supabase
         .from('time_logs')

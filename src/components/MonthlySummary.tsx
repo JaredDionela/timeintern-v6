@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { getCurrentMonth, getCurrentYear } from "@/lib/dateUtils";
 
 interface TimeLogEntry {
   date: string;
@@ -17,8 +18,8 @@ interface TimeLogEntry {
 const MonthlySummary = () => {
   const [monthlyData, setMonthlyData] = useState<TimeLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [selectedYear, setSelectedYear] = useState(getCurrentYear());
   const { toast } = useToast();
 
   useEffect(() => {

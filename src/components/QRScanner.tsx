@@ -5,6 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import QrScanner from 'qr-scanner';
 import type { ScanResult as QrScannerScanResult } from 'qr-scanner';
+import { getLocalDateString } from "@/lib/dateUtils";
 
 interface QRScannerProps {
   onClose: () => void;
@@ -100,7 +101,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         return;
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const { data: existingLog, error: fetchError } = await supabase
         .from('time_logs')
         .select('id, time_in, time_out')

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Calendar, Download, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { getLocalDateString } from "@/lib/dateUtils";
 
 interface DailyLogEntry {
   id: string;
@@ -20,7 +21,7 @@ const DailyLogs = () => {
   const [dailyLogs, setDailyLogs] = useState<DailyLogEntry[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<DailyLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
