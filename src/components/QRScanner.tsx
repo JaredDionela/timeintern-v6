@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { X, Scan, Camera, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import QrScanner from "qr-scanner";
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import QrScanner, { ScanResult as QrScannerScanResult } from 'qr-scanner'; // Adjusted import
+import { useNavigate } from 'react-router-dom';
 
 interface QRScannerProps {
   onClose: () => void;
@@ -71,7 +71,7 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
     console.log('Cleaning up QR scanner...');
     if (qrScannerRef.current) {
       try {
-        (qrScannerRef.current as QrScanner).destroy();
+        qrScannerRef.current.destroy();
       } catch (error) {
         console.error('Error destroying QR scanner:', error);
       }
@@ -91,148 +91,154 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
   };
 
   const startScanner = async () => {
-    if (!videoRef.current || !hasCamera) return;
+    if (!videoRef.current || !hasCamera) {
+      console.log('startScanner: videoRef or camera not available. Exiting.');
+      return;
+    }
 
     try {
       setError(null);
-      console.log('Starting QR scanner...');
+      console.log('startScanner: Attempting to start QR scanner...');
       
-      // Cleanup any existing scanner first
       if (qrScannerRef.current) {
+        console.log('startScanner: Destroying existing QrScanner instance.');
         try {
-          (qrScannerRef.current as QrScanner).destroy();
+          qrScannerRef.current.destroy();
         } catch (error) {
-          console.error('Error destroying existing QR scanner during start:', error);
+          console.error('startScanner: Error destroying existing QR scanner:', error);
         }
         qrScannerRef.current = null;
       }
       
-      // Get camera stream with fallback constraints
+      console.log('startScanner: Requesting camera stream...');
       let stream;
       try {
-        console.log('Attempting to access back camera...');
+        console.log('startScanner: Attempting to access back camera (environment)...');
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
           } 
         });
+        console.log('startScanner: Back camera stream obtained.');
       } catch (err) {
-        console.log('Back camera failed, trying any camera...');
+        console.warn('startScanner: Back camera failed, trying any available camera...', err);
         stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
           } 
         });
+        console.log('startScanner: Fallback camera stream obtained.');
       }
       
-      console.log('Camera stream obtained:', stream);
+      if (!stream) {
+        console.error("startScanner: Failed to obtain camera stream.");
+        throw new Error("Failed to obtain camera stream.");
+      }
+      console.log('startScanner: Camera stream active:', stream.active, 'Stream ID:', stream.id);
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
       streamRef.current = stream;
-      setPermissionGranted(true);
+      setPermissionGranted(true); 
       
-      // Wait for video to be ready and actually start playing
-      console.log('Waiting for video to load...');
+      console.log('startScanner: Waiting for video metadata and playback...');
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          console.error('Video load timeout');
-          reject(new Error('Video load timeout'));
-        }, 10000);
-        
-        const onLoadedMetadata = () => {
-          console.log('Video metadata loaded, starting playback...');
-          clearTimeout(timeout);
-          if (videoRef.current) {
-            videoRef.current.removeEventListener('loadedmetadata', onLoadedMetadata);
-            videoRef.current.removeEventListener('canplay', onCanPlay);
-            videoRef.current.play()
-              .then(() => {
-                console.log('Video is now playing');
-                setTimeout(() => resolve(), 500); // Small delay to ensure video is actually playing
-              })
-              .catch((playError) => {
-                console.error('Video play error:', playError);
-                // Still resolve as camera access is working for some cases, or reject if critical
-                setTimeout(() => resolve(), 500); 
-              });
-          } else {
-            reject(new Error("videoRef.current is null in onLoadedMetadata"));
-          }
-        };
-        
+        if (!videoRef.current) {
+          console.error("startScanner: videoRef.current is null before setting up video play promise.");
+          return reject(new Error("videoRef.current is null before play promise"));
+        }
+        const videoElement = videoRef.current;
+
         const onCanPlay = () => {
-          console.log('Video can play');
-          onLoadedMetadata();
+          console.log('startScanner: Video event "canplay" triggered.');
+          videoElement.play()
+            .then(() => {
+              console.log('startScanner: Video is playing.');
+              videoElement.removeEventListener('canplay', onCanPlay);
+              videoElement.removeEventListener('error', onVideoError);
+              setTimeout(resolve, 300); 
+            })
+            .catch(playError => {
+              console.error('startScanner: Video play() failed:', playError);
+              reject(playError);
+            });
         };
-        
-        if (videoRef.current) {
-          if (videoRef.current.readyState >= 2) { // HAVE_CURRENT_DATA or more
-            onLoadedMetadata();
-          } else {
-            videoRef.current.addEventListener('loadedmetadata', onLoadedMetadata);
-            videoRef.current.addEventListener('canplay', onCanPlay);
-          }
+
+        const onVideoError = (e: Event) => {
+          console.error('startScanner: Video element error:', e);
+          reject(new Error('Video element error'));
+        };
+
+        if (videoElement.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+           console.log('startScanner: Video already has enough data, attempting to play.');
+           onCanPlay();
         } else {
-           reject(new Error("videoRef.current is null before event listeners"));
+          console.log('startScanner: Adding "canplay" and "error" event listeners to video element.');
+          videoElement.addEventListener('canplay', onCanPlay);
+          videoElement.addEventListener('error', onVideoError);
         }
       });
       
       // Initialize QR Scanner
       console.log('Initializing QR Scanner...');
-      // Ensure worker path is correctly set (assuming it's in public folder)
-      QrScanner.WORKER_PATH = '/qr-scanner-worker.min.js';
-      
+
       if (videoRef.current) {
+        console.log('startScanner: Creating new QrScanner instance.');
         qrScannerRef.current = new QrScanner(
-          videoRef.current, 
-          (result) => { // This is the direct callback from the qr-scanner library
-            const qrData = typeof result === 'string' ? result : result.data;
+          videoRef.current,
+          (result: QrScannerScanResult | string) => { // Use the imported type alias
+            const currentScanTime = new Date().toISOString();
+            console.log(`[${currentScanTime}] QR SCANNER DETECTED: `, result); 
             
-            // Log immediately when the library detects something
-            console.log('QR Scanner library detected raw result:', result);
-            
-            if (qrData) {
-              console.log('QR Code data extracted:', qrData);
-              // Call handleScan only if data is valid and no other scan is in progress
+            let qrData: string; 
+            if (typeof result === 'string') {
+              qrData = result;
+            } else {
+              qrData = result.data; 
+            }
+            console.log(`[${currentScanTime}] Extracted QR Data: '${qrData}'`);
+
+            if (qrData && qrData.trim() !== "") {
+              console.log(`[${currentScanTime}] Valid QR Data found. Current scanInProgress state: ${scanInProgress}`);
               if (!scanInProgress) {
                 handleScan(qrData);
               } else {
-                console.log('Scan already in progress. Ignoring new QR data:', qrData);
+                console.log(`[${currentScanTime}] Scan already in progress. Ignoring this detection.`);
               }
             } else {
-              // This might happen if the library fires an event with no decodable QR code
-              console.log('QR Scanner detected an empty or undecodable result.');
+              console.log(`[${currentScanTime}] QR Scanner detected empty or undecodable result.`);
             }
           },
           {
-            returnDetailedScanResult: true, 
-            highlightScanRegion: true,
+            returnDetailedScanResult: true,
+            highlightScanRegion: true, 
             highlightCodeOutline: true,
-            maxScansPerSecond: 2,
-            // calculateScanRegion: (video) => { // Example: scan only center 50%
-            //   const videoWidth = video.videoWidth;
-            //   const videoHeight = video.videoHeight;
-            //   const regionSize = Math.min(videoWidth, videoHeight) * 0.5;
-            //   return {
-            //     x: (videoWidth - regionSize) / 2,
-            //     y: (videoHeight - regionSize) / 2,
-            //     width: regionSize,
-            //     height: regionSize
-            //   };
-            // }
           }
         );
-      
-        await qrScannerRef.current.start();
-        console.log('QR Scanner started.');
-        toast({
-          title: "Camera Active",
-          description: "Point your camera at a QR code to scan.",
-        });
+
+        console.log('startScanner: QrScanner instance created.');
+
+        if (qrScannerRef.current) {
+          console.log('startScanner: Attempting to call qrScanner.start()...');
+          setIsScanning(true); // Set isScanning to true to make video visible before starting
+          qrScannerRef.current.start()
+            .then(() => {
+              console.log('startScanner: qrScanner.start() resolved successfully.');
+              // isScanning is already true, no need to set it again here
+            })
+            .catch((error: any) => {
+              console.error('startScanner: Error calling qrScanner.start():', error);
+              setError(`Failed to start QR scanner: ${error instanceof Error ? error.message : String(error)}`);
+              setIsScanning(false); // Set isScanning back to false if start() fails
+            });
+        } else {
+          console.error('startScanner: qrScannerRef.current is null after instantiation.');
+          setError('Failed to initialize QR scanner component.');
+        }
       } else {
         throw new Error("videoRef.current is null before initializing QrScanner");
       }
@@ -260,25 +266,20 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
   };
 
   const handleScan = async (qrData: string) => {
-    // The initial check for scanInProgress is now handled before calling handleScan
-    // if (scanInProgress) return; 
-
-    // Add a check for empty qrData at the beginning of handleScan (should be redundant if checked in callback)
-    if (!qrData) {
-      console.log('handleScan called with empty qrData. Aborting.');
-      // setScanInProgress(false); // Not needed here as it's handled by the caller or finally block
-      return;
+    console.log(`handleScan: Called at ${new Date().toISOString()} with data: '${qrData}'`);
+    if (scanInProgress) {
+        console.log('handleScan: Scan already in progress, returning immediately.');
+        return;
     }
-    
-    console.log('handleScan called with:', qrData);
     setScanInProgress(true);
+    console.log('handleScan: scanInProgress set to true.');
 
     if (qrScannerRef.current) {
       try {
-        qrScannerRef.current.pause(); // Corrected: pause takes no arguments
-        console.log('QR Scanner paused for processing.');
+        console.log('handleScan: Pausing QR scanner for processing.');
+        qrScannerRef.current.pause(); 
       } catch (error) {
-        console.error('Error pausing QR scanner:', error);
+        console.error('handleScan: Error pausing QR scanner:', error);
       }
     }
 
@@ -391,22 +392,22 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
         variant: "destructive",
       });
     } finally {
+      console.log(`handleScan: finally block executing at ${new Date().toISOString()}. Setting scanInProgress to false.`);
       setScanInProgress(false);
+      
       setTimeout(() => {
-        if (qrScannerRef.current && isScanning && videoRef.current && videoRef.current.srcObject) { 
-          try {
-            if ((videoRef.current.srcObject as MediaStream).active) {
-              qrScannerRef.current.start().then(() => {
-                console.log('QR Scanner restarted after processing.');
-              }).catch(e => console.error("Error restarting scanner after processing:", e));
-            } else {
-              console.log("Video stream inactive, not restarting scanner immediately after processing.");
-            }
-          } catch(e) {
-            console.error("Error trying to restart scanner after processing:", e);
+        if (qrScannerRef.current && isScanning && videoRef.current && videoRef.current.srcObject) {
+          const mediaStream = videoRef.current.srcObject as MediaStream;
+          if (mediaStream.active) {
+            console.log(`handleScan: (setTimeout) Attempting to restart scanner at ${new Date().toISOString()}.`);
+            qrScannerRef.current.start().then(() => {
+              console.log(`handleScan: (setTimeout) QR Scanner restarted successfully at ${new Date().toISOString()}.`);
+            }).catch((e: any) => console.error("handleScan: (setTimeout) Error restarting scanner:", e));
+          } else {
+            console.log("handleScan: (setTimeout) Video stream inactive, not restarting scanner.");
           }
         } else {
-          console.log("Conditions not met to restart scanner after processing.");
+          console.log(`handleScan: (setTimeout) Conditions not met to restart scanner at ${new Date().toISOString()}. isScanning: ${isScanning}`);
         }
       }, 1500); 
     }
