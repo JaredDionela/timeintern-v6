@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { clearAllAuthData } from "@/lib/clearAuth";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -28,11 +29,14 @@ const Index = () => {
     if (!authLoading && user) {
       console.log('User already authenticated, redirecting...');
       
-      if (isAdmin) {
-        navigate("/admin");
-      } else {
-        navigate("/intern");
-      }
+      // Add a small delay to prevent redirect loops
+      setTimeout(() => {
+        if (isAdmin) {
+          navigate("/admin");
+        } else {
+          navigate("/intern");
+        }
+      }, 100);
     }
   }, [authLoading, user, isAdmin, navigate]);
 
@@ -155,6 +159,14 @@ const Index = () => {
       }
     } catch (error: any) {
       console.error("Authentication error:", error);
+      
+      // If it's a 403 or session error, clear auth data
+      if (error.message?.includes('403') || error.message?.includes('Forbidden') || error.message?.includes('session')) {
+        console.log('Clearing corrupted auth data due to session error');
+        clearAllAuthData();
+        localStorage.setItem('auth-error', 'true');
+      }
+      
       toast({
         title: "Error",
         description: error.message || "Authentication failed",
@@ -163,6 +175,17 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Emergency clear function for testing
+  const handleClearAuth = () => {
+    clearAllAuthData();
+    toast({
+      title: "Auth Data Cleared",
+      description: "All authentication data has been cleared. Please try signing in again.",
+    });
+    // Reload the page to reset state
+    window.location.reload();
   };
 
   return (
@@ -289,6 +312,18 @@ const Index = () => {
               </form>
             </TabsContent>
           </Tabs>
+          
+          {/* Emergency clear button for debugging */}
+          <div className="mt-4 text-center">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleClearAuth}
+              className="text-xs text-slate-500 hover:text-slate-400"
+            >
+              Clear Auth Data (Debug)
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

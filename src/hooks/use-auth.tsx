@@ -15,28 +15,47 @@ export const useAuth = (): UseAuthReturn => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);  useEffect(() => {
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
     // Check for existing session on mount
     const getSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (session?.user) {
+        if (error) {
+          console.error('Session error:', error);
+          if (mounted) {
+            setSession(null);
+            setUser(null);
+            setIsAdmin(false);
+            setLoading(false);
+          }
+          return;
+        }
+        
+        if (session?.user && mounted) {
           setSession(session);
           setUser(session.user);
           setIsAdmin(session.user?.email?.toLowerCase().includes('admin') || false);
-        } else {
+        } else if (mounted) {
           setSession(null);
           setUser(null);
           setIsAdmin(false);
         }
       } catch (error) {
         console.error('Session check error:', error);
-        setSession(null);
-        setUser(null);
-        setIsAdmin(false);
+        if (mounted) {
+          setSession(null);
+          setUser(null);
+          setIsAdmin(false);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -44,9 +63,11 @@ export const useAuth = (): UseAuthReturn => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
         
+        if (!mounted) return;
+
         if (event === 'SIGNED_OUT' || !session) {
           setSession(null);
           setUser(null);
@@ -78,7 +99,10 @@ export const useAuth = (): UseAuthReturn => {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string, rememberMe = false) => {
