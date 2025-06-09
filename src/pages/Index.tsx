@@ -27,11 +27,30 @@ const Index = () => {
   useEffect(() => {
     if (!authLoading && user) {
       console.log('User already authenticated, redirecting...');
-      if (isAdmin) {
-        navigate("/admin");
-      } else {
-        navigate("/intern");
-      }
+      
+      // Verify the user session is still valid before redirecting
+      const verifyAndRedirect = async () => {
+        try {
+          const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+          
+          if (error || !currentUser) {
+            console.error('Invalid session detected, signing out:', error);
+            await supabase.auth.signOut();
+            return;
+          }
+          
+          if (isAdmin) {
+            navigate("/admin");
+          } else {
+            navigate("/intern");
+          }
+        } catch (error) {
+          console.error('Session verification failed:', error);
+          await supabase.auth.signOut();
+        }
+      };
+      
+      verifyAndRedirect();
     }
   }, [authLoading, user, isAdmin, navigate]);
 

@@ -38,24 +38,39 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+          console.log('No valid session, redirecting to login');
+          navigate('/');
+          return;
+        }
+        
+        // Verify the session by checking user
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError || !user) {
+          console.error('User verification failed:', userError);
+          await supabase.auth.signOut();
+          navigate('/');
+          return;
+        }
+        
+        if (!user?.email?.includes('admin')) {
+          console.log('User is not admin, redirecting');
+          navigate('/');
+          return;
+        }
+        
+        console.log('Auth check passed for admin:', user.email);
+        setIsAdmin(true);
+        setLoading(false);
+      } catch (error) {
+        console.error('Auth check error:', error);
+        await supabase.auth.signOut();
         navigate('/');
-        return;
       }
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email?.includes('admin')) {
-        navigate('/');
-        return;
-      }
-      
-      // Removed fetching from admin_profiles as per user's plan for a single admin account
-      // Admin name is already defaulted via useState
-      
-      setIsAdmin(true);
-      setLoading(false);
     };
 
     checkAuth();

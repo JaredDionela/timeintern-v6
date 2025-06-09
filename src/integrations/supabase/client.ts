@@ -5,4 +5,17 @@ import type { Database } from "./types"
 const supabaseUrl = "https://dmhttwzuhamyhldfjkhc.supabase.co"
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtaHR0d3p1aGFteWhsZGZqa2hjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMDQzNTAsImV4cCI6MjA2NDg4MDM1MH0.0uMPWncj4pqxNKVctb7XRS1QsaIrr8uTOg5fEbvdxpo"
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+    flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'timeinternv6@1.0.0'
+    }
+  }
+})
