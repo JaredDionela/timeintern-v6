@@ -1,540 +1,361 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, Scan, Camera, AlertCircle, Loader2 } from "lucide-react";
+// Card components are imported but not used in the current JSX. Keep if planned for future.
+// import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; 
+import { X, /* Scan, Camera, AlertCircle, */ Loader2 } from "lucide-react"; // Scan, Camera, AlertCircle not used
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import QrScanner, { ScanResult as QrScannerScanResult } from 'qr-scanner'; // Adjusted import
-import { useNavigate } from 'react-router-dom';
+import QrScanner from 'qr-scanner'; // Corrected import
+import type { ScanResult as QrScannerScanResult } from 'qr-scanner';
+// import { useNavigate } from 'react-router-dom'; // useNavigate was not used
 
 interface QRScannerProps {
   onClose: () => void;
 }
 
-const QRScanner = ({ onClose }: QRScannerProps) => {
-  const [isScanning, setIsScanning] = useState(false);
+const QRScannerComponent = ({ onClose }: QRScannerProps) => {
+  const [isScanning, setIsScanning] = useState(true); // Start scanning by default
   const [error, setError] = useState<string | null>(null);
   const [scanInProgress, setScanInProgress] = useState(false);
-  const [hasCamera, setHasCamera] = useState(true);
-  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false); // Track scanner state manually
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
   const { toast } = useToast();
-  const navigate = useNavigate(); // Initialize useNavigate
 
-  useEffect(() => {
-    // Check if camera is available and request permissions
-    const checkCamera = async () => {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setHasCamera(false);
-          setError('Camera not supported in this browser');
-          return;
-        }
-        
-        // Test camera permissions
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          stream.getTracks().forEach(track => track.stop());
-          setPermissionGranted(true);
-          setHasCamera(true);
-        } catch (err) {
-          console.log('Camera permission not yet granted');
-          setPermissionGranted(false);
-          setHasCamera(true); // Camera exists but permission not granted
-        }
-      } catch (err) {
-        console.error('Error checking camera:', err);
-        setHasCamera(false);
-        setError('Camera not available');
-      }
-    };
-    
-    checkCamera();
-    
-    return () => {
-      cleanup();
-    };
-  }, []);
-
-  // Start scanner when isScanning becomes true
-  useEffect(() => {
-    if (isScanning) {
-      startScanner();
-    } else {
-      cleanup();
+  const cleanup = useCallback(() => {
+    console.log('cleanup: Called');
+    if (qrScannerRef.current) {
+      console.log('cleanup: Destroying QrScanner instance.');
+      qrScannerRef.current.destroy();
+      qrScannerRef.current = null;
+      setScannerActive(false);
     }
-  }, [isScanning]);
+    if (videoRef.current && videoRef.current.srcObject) {
+      console.log('cleanup: Stopping media tracks.');
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    console.log('cleanup: Finished.');
+  }, []); // Dependencies: videoRef, qrScannerRef (refs are stable)
 
-  const cleanup = () => {
-    console.log('Cleaning up QR scanner...');
+  const handleScan = useCallback(async (qrData: string) => {
+    console.log(`handleScan: Called at ${new Date().toISOString()} with data: \'${qrData}\'`);
+
     if (qrScannerRef.current) {
       try {
-        qrScannerRef.current.destroy();
-      } catch (error) {
-        console.error('Error destroying QR scanner:', error);
+        console.log('handleScan: Pausing scanner.');
+        qrScannerRef.current.pause();
+        setScannerActive(false);
+      } catch (pauseError) {
+        console.warn('handleScan: Error pausing scanner, it might have been destroyed:', pauseError);
       }
-      qrScannerRef.current = null;
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop();
-        console.log('Camera track stopped:', track.kind);
-      });
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-      videoRef.current.pause();
-    }
-  };
 
-  const startScanner = async () => {
-    if (!videoRef.current || !hasCamera) {
-      console.log('startScanner: videoRef or camera not available. Exiting.');
+    try {
+      console.log(`handleScan: Processing QR data: ${qrData}`);
+      if (!qrData.startsWith("attendance-")) {
+        console.warn("handleScan: Invalid QR code format.");
+        toast({ title: "Invalid QR Code", description: "This QR code is not valid for attendance.", variant: "destructive" });
+        setError("Invalid QR code scanned.");
+        return;
+      }
+
+      const user = await supabase.auth.getUser();
+      if (!user || !user.data.user) {
+        console.error("handleScan: User not authenticated.");
+        toast({ title: "Authentication Error", description: "You must be logged in to record attendance.", variant: "destructive" });
+        setError("User not authenticated.");
+        return;
+      }
+      const userId = user.data.user.id;
+      console.log(`handleScan: Authenticated user ID: ${userId}`);
+
+      const today = new Date().toISOString().split('T')[0];
+      const { data: existingLog, error: fetchError } = await supabase
+        .from('time_logs')
+        .select('id, time_in, time_out') // Select only necessary fields
+        .eq('user_id', userId)
+        .eq('date', today)
+        .maybeSingle(); // Expect at most one row
+
+      if (fetchError) {
+        console.error("handleScan: Error fetching existing time log:", fetchError);
+        toast({ title: "Database Error", description: "Could not check existing logs.", variant: "destructive" });
+        setError(`Error fetching logs: ${fetchError.message}`);
+        return;
+      }
+
+      console.log("handleScan: Existing log for today:", existingLog);
+
+      if (existingLog) {
+        if (existingLog.time_in && existingLog.time_out) {
+          console.log("handleScan: Attendance already recorded for today (both time-in and time-out).");
+          toast({ title: "Attendance Recorded", description: "You have already timed in and out for today.", variant: "default" });
+          onClose();
+          return;
+        } else if (existingLog.time_in && !existingLog.time_out) {
+          console.log("handleScan: User is timing out.");
+          const { error: updateError } = await supabase
+            .from('time_logs')
+            .update({ time_out: new Date().toISOString() })
+            .eq('id', existingLog.id);
+
+          if (updateError) {
+            console.error("handleScan: Error updating time_out:", updateError);
+            toast({ title: "Time Out Error", description: "Failed to record your time out.", variant: "destructive" });
+            setError(`Time out error: ${updateError.message}`);
+          } else {
+            console.log("handleScan: Time out recorded successfully.");
+            toast({ title: "Time Out Successful", description: "You have successfully timed out.", variant: "default" });
+            onClose();
+          }
+        }
+        // Case: existingLog.time_in is null (should not happen if inserted correctly) - treat as new time_in or error
+      } else {
+        console.log("handleScan: User is timing in.");
+        const { error: insertError } = await supabase
+          .from('time_logs')
+          .insert({ user_id: userId, date: today, time_in: new Date().toISOString() });
+
+        if (insertError) {
+          console.error("handleScan: Error inserting time_in:", insertError);
+          toast({ title: "Time In Error", description: "Failed to record your time in.", variant: "destructive" });
+          setError(`Time in error: ${insertError.message}`);
+        } else {
+          console.log("handleScan: Time in recorded successfully.");
+          toast({ title: "Time In Successful", description: "You have successfully timed in.", variant: "default" });
+          // Consider if onClose() should be called here or if user stays to see confirmation.
+          // For now, keeping it open after time-in.
+        }
+      }
+    } catch (e) {
+      console.error("handleScan: Unexpected error during scan processing:", e);
+      toast({ title: "Scan Processing Error", description: "An unexpected error occurred.", variant: "destructive" });
+      setError(`Processing error: ${(e as Error).message}`);
+    } finally {
+      console.log(`handleScan: finally block executing at ${new Date().toISOString()}.`);
+      setScanInProgress(false);
+      console.log('handleScan: scanInProgress set to false.');
+      
+      // Restart scanner after a short delay if still scanning and scanner exists
+      if (isScanning && qrScannerRef.current) {
+        setTimeout(() => {
+          if (qrScannerRef.current && isScanning) {
+            console.log('handleScan finally (delayed): Restarting scanner');
+            qrScannerRef.current.start()
+              .then(() => {
+                console.log('Scanner restarted successfully after scan processing.');
+                setScannerActive(true);
+              })
+              .catch(err => {
+                console.error('Error restarting scanner after scan processing:', err);
+                setError("Failed to restart scanner.");
+                setScannerActive(false);
+              });
+          }
+        }, 500); // Give a bit more time for processing
+      }
+    }
+  }, [toast, onClose, setError, setScanInProgress, isScanning, supabase]);
+
+  const startScanner = useCallback(async () => {
+    console.log('startScanner: Called');
+    setError(null);
+    if (!videoRef.current) {
+      console.error('startScanner: Video element not available.');
+      setError("Video element not available.");
+      return;
+    }
+    if (qrScannerRef.current) {
+      console.log('startScanner: Scanner already initialized. Ensuring it is started.');
+      try {
+        if (!scannerActive) {
+          await qrScannerRef.current.start();
+          setScannerActive(true);
+        }
+        setIsScanning(true); // Ensure state reflects scanner is active
+        console.log('startScanner: Existing scanner confirmed/started successfully.');
+      } catch (err) {
+        console.error('startScanner: Error starting existing scanner:', err);
+        setError(`Error starting existing scanner: ${(err as Error).message}`);
+        cleanup();
+      }
       return;
     }
 
+    console.log('startScanner: Attempting to access camera.');
     try {
-      setError(null);
-      console.log('startScanner: Attempting to start QR scanner...');
-      
-      if (qrScannerRef.current) {
-        console.log('startScanner: Destroying existing QrScanner instance.');
-        try {
-          qrScannerRef.current.destroy();
-        } catch (error) {
-          console.error('startScanner: Error destroying existing QR scanner:', error);
-        }
-        qrScannerRef.current = null;
-      }
-      
-      console.log('startScanner: Requesting camera stream...');
-      let stream;
-      try {
-        console.log('startScanner: Attempting to access back camera (environment)...');
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: 'environment',
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 }
-          } 
-        });
-        console.log('startScanner: Back camera stream obtained.');
-      } catch (err) {
-        console.warn('startScanner: Back camera failed, trying any available camera...', err);
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 }
-          } 
-        });
-        console.log('startScanner: Fallback camera stream obtained.');
-      }
-      
-      if (!stream) {
-        console.error("startScanner: Failed to obtain camera stream.");
-        throw new Error("Failed to obtain camera stream.");
-      }
-      console.log('startScanner: Camera stream active:', stream.active, 'Stream ID:', stream.id);
-
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-      }
-      streamRef.current = stream;
-      setPermissionGranted(true); 
-      
-      console.log('startScanner: Waiting for video metadata and playback...');
-      await new Promise<void>((resolve, reject) => {
-        if (!videoRef.current) {
-          console.error("startScanner: videoRef.current is null before setting up video play promise.");
-          return reject(new Error("videoRef.current is null before play promise"));
-        }
-        const videoElement = videoRef.current;
+        // Ensure video plays, muted and playsinline are important
+        videoRef.current.muted = true; 
+        videoRef.current.playsInline = true;
+        await videoRef.current.play();
+        console.log('startScanner: Camera stream acquired and video playing.');
 
-        const onCanPlay = () => {
-          console.log('startScanner: Video event "canplay" triggered.');
-          videoElement.play()
-            .then(() => {
-              console.log('startScanner: Video is playing.');
-              videoElement.removeEventListener('canplay', onCanPlay);
-              videoElement.removeEventListener('error', onVideoError);
-              setTimeout(resolve, 300); 
-            })
-            .catch(playError => {
-              console.error('startScanner: Video play() failed:', playError);
-              reject(playError);
-            });
-        };
-
-        const onVideoError = (e: Event) => {
-          console.error('startScanner: Video element error:', e);
-          reject(new Error('Video element error'));
-        };
-
-        if (videoElement.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
-           console.log('startScanner: Video already has enough data, attempting to play.');
-           onCanPlay();
-        } else {
-          console.log('startScanner: Adding "canplay" and "error" event listeners to video element.');
-          videoElement.addEventListener('canplay', onCanPlay);
-          videoElement.addEventListener('error', onVideoError);
-        }
-      });
-      
-      // Initialize QR Scanner
-      console.log('Initializing QR Scanner...');
-
-      if (videoRef.current) {
-        console.log('startScanner: Creating new QrScanner instance.');
         qrScannerRef.current = new QrScanner(
           videoRef.current,
-          (result: QrScannerScanResult | string) => { // Use the imported type alias
+          (result: QrScannerScanResult | string) => {
             const currentScanTime = new Date().toISOString();
-            console.log(`[${currentScanTime}] QR SCANNER DETECTED: `, result); 
-            
-            let qrData: string; 
+            console.log(`[${currentScanTime}] QR SCANNER RAW DETECTED: `, result);
+            let qrData: string;
             if (typeof result === 'string') {
               qrData = result;
+            } else if (result && typeof result.data === 'string') {
+              qrData = result.data;
             } else {
-              qrData = result.data; 
+              console.warn(`[${currentScanTime}] Received scan result in unexpected format:`, result);
+              return;
             }
-            console.log(`[${currentScanTime}] Extracted QR Data: '${qrData}'`);
+            console.log(`[${currentScanTime}] Extracted QR Data: \'${qrData}\'`);
 
             if (qrData && qrData.trim() !== "") {
-              console.log(`[${currentScanTime}] Valid QR Data found. Current scanInProgress state: ${scanInProgress}`);
-              if (!scanInProgress) {
+              setScanInProgress(currentVal => {
+                if (currentVal) {
+                  console.log(`[${currentScanTime}] Scan result \'${qrData}\' received, but another scan is already in progress. Ignoring.`);
+                  return true;
+                }
+                console.log(`[${currentScanTime}] Processing QR Data: \'${qrData}\'. Setting scanInProgress to true.`);
                 handleScan(qrData);
-              } else {
-                console.log(`[${currentScanTime}] Scan already in progress. Ignoring this detection.`);
-              }
+                return true;
+              });
             } else {
-              console.log(`[${currentScanTime}] QR Scanner detected empty or undecodable result.`);
+              console.warn(`[${currentScanTime}] Scanned QR data is empty or invalid after extraction.`);
             }
           },
           {
-            returnDetailedScanResult: true,
-            highlightScanRegion: true, 
+            highlightScanRegion: true,
             highlightCodeOutline: true,
+            preferredCamera: 'environment'
           }
         );
 
-        console.log('startScanner: QrScanner instance created.');
-
-        if (qrScannerRef.current) {
-          console.log('startScanner: Attempting to call qrScanner.start()...');
-          setIsScanning(true); // Set isScanning to true to make video visible before starting
-          qrScannerRef.current.start()
-            .then(() => {
-              console.log('startScanner: qrScanner.start() resolved successfully.');
-              // isScanning is already true, no need to set it again here
-            })
-            .catch((error: any) => {
-              console.error('startScanner: Error calling qrScanner.start():', error);
-              setError(`Failed to start QR scanner: ${error instanceof Error ? error.message : String(error)}`);
-              setIsScanning(false); // Set isScanning back to false if start() fails
-            });
-        } else {
-          console.error('startScanner: qrScannerRef.current is null after instantiation.');
-          setError('Failed to initialize QR scanner component.');
-        }
+        console.log('startScanner: New QrScanner instance created. Attempting to start it.');
+        await qrScannerRef.current.start();
+        setScannerActive(true);
+        setIsScanning(true); // Set state after successful start
+        console.log('startScanner: New QrScanner started successfully.');
       } else {
-        throw new Error("videoRef.current is null before initializing QrScanner");
+         console.warn('startScanner: Video ref became null after stream acquisition.');
+        stream.getTracks().forEach(track => track.stop());
       }
-      
-    } catch (err: any) {
-      console.error('Error starting scanner:', err);
-      setError(err.message || 'Failed to start camera.');
-      setIsScanning(false); 
-      
-      let errorMessage = 'Failed to start camera';
-      if (err.name === 'NotAllowedError') {
-        errorMessage = 'Camera permission denied. Please allow camera access in your browser settings.';
-      } else if (err.name === 'NotFoundError') {
-        errorMessage = 'No camera found. Please ensure a camera is connected and enabled.';
-      } else if (err.message) {
-        errorMessage = err.message;
+    } catch (err) {
+      console.error('startScanner: Error initializing scanner or accessing camera:', err);
+      let message = "Failed to start QR scanner.";
+      if (err instanceof Error) {
+        message += ` ${err.name}: ${err.message}.`;
       }
-      
-      toast({
-        title: "Camera Error",
-        description: errorMessage,
-        variant: "destructive"
-      });
+      if ((err as Error).name === 'NotAllowedError') {
+        message += ' Please grant camera permissions.';
+      }
+      setError(message);
+      setIsScanning(false); // Ensure isScanning is false if start fails
+      cleanup();
     }
+  }, [handleScan, setScanInProgress, setError, setIsScanning, cleanup]); // Removed supabase, it's a dep of handleScan
+
+  useEffect(() => {
+    if (isScanning) {
+      console.log('useEffect [isScanning]: isScanning is true, calling startScanner.');
+      startScanner();
+    } else {
+      // This will be called if isScanning is set to false (e.g., by stopScanning or if startScanner fails)
+      console.log('useEffect [isScanning]: isScanning is false, calling cleanup.');
+      cleanup();
+    }
+
+    // Cleanup function for this effect:
+    // This runs when isScanning changes, or when the component unmounts.
+    return () => {
+      console.log('useEffect [isScanning]: cleanup phase. Current isScanning value before this cleanup was:', isScanning);
+      // If the component is unmounting, or if isScanning just became false,
+      // we want to ensure cleanup happens. The 'else' block above handles when isScanning becomes false.
+      // This specific return function is crucial for unmount.
+      // Call cleanup directly to be certain. cleanup() is idempotent.
+      cleanup();
+    };
+  }, [isScanning, startScanner, cleanup]); // Dependencies for the effect
+
+  const stopScanningAndClose = () => {
+    console.log('stopScanningAndClose: User triggered stop.');
+    setIsScanning(false); // This will trigger cleanup via the useEffect
+    onClose();
   };
 
-  const handleScan = async (qrData: string) => {
-    console.log(`handleScan: Called at ${new Date().toISOString()} with data: '${qrData}'`);
-    if (scanInProgress) {
-        console.log('handleScan: Scan already in progress, returning immediately.');
-        return;
-    }
-    setScanInProgress(true);
-    console.log('handleScan: scanInProgress set to true.');
-
-    if (qrScannerRef.current) {
-      try {
-        console.log('handleScan: Pausing QR scanner for processing.');
-        qrScannerRef.current.pause(); 
-      } catch (error) {
-        console.error('handleScan: Error pausing QR scanner:', error);
-      }
-    }
-
-    try {
-      if (!qrData || !qrData.startsWith("attendance-")) {
-        toast({
-          title: "Invalid QR Code",
-          description: "This QR code is not a valid attendance code.",
-          variant: "destructive",
-        });
-        // No need to call setScanInProgress(false) here, finally block will handle it
-        return; 
-      }
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Authentication Error",
-          description: "You must be logged in to record attendance.",
-          variant: "destructive",
-        });
-        navigate('/'); 
-        return; 
-      }
-
-      const now = new Date();
-      const today = now.toISOString().split('T')[0];
-      const currentTime = now.toTimeString().split(' ')[0]; // HH:MM:SS
-
-      const { data: existingLog, error: fetchError } = await supabase
-        .from('time_logs')
-        .select('id, time_in, time_out, date')
-        .eq('user_id', user.id)
-        .eq('date', today)
-        .single();
-
-      if (fetchError && fetchError.code !== 'PGRST116') { 
-        console.error("Error fetching existing log:", fetchError);
-        throw new Error(fetchError.message || "Could not fetch existing log.");
-      }
-
-      if (!existingLog) {
-        // Time in
-        const { error: insertError } = await supabase
-          .from('time_logs')
-          .insert({
-            user_id: user.id,
-            date: today,
-            time_in: currentTime,
-          });
-        if (insertError) {
-          console.error("Error inserting time_in:", insertError);
-          throw new Error(insertError.message || "Failed to record time-in.");
-        }
-        toast({
-          title: "Time In Successful",
-          description: `You have successfully timed in at ${currentTime}.`,
-        });
-      } else if (existingLog.time_in && !existingLog.time_out) {
-        // Time out
-        const timeInDate = new Date(`${existingLog.date}T${existingLog.time_in}`);
-        const timeOutDate = now;
-        const diffMilliseconds = timeOutDate.getTime() - timeInDate.getTime();
-        
-        if (diffMilliseconds < 0) {
-          toast({
-            title: "Time Out Error",
-            description: "Time-out cannot be earlier than time-in. Please check system time.",
-            variant: "destructive",
-          });
-          return; 
-        }
-
-        const hoursWorked = parseFloat((diffMilliseconds / (1000 * 60 * 60)).toFixed(2));
-
-        const { error: updateError } = await supabase
-          .from('time_logs')
-          .update({ time_out: currentTime, total_hours: hoursWorked })
-          .eq('id', existingLog.id);
-
-        if (updateError) {
-          console.error("Error updating time_out:", updateError);
-          throw new Error(updateError.message || "Failed to record time-out.");
-        }
-        toast({
-          title: "Time Out Successful",
-          description: `You have successfully timed out at ${currentTime}. Hours worked: ${hoursWorked.toFixed(2)}.`
-        });
-      } else if (existingLog.time_in && existingLog.time_out) {
-        // Already timed in and out
-        toast({
-          title: "Attendance Recorded",
-          description: "You have already timed in and out for today.",
-          variant: "default", 
-        });
-      } else {
-         console.warn("Unexpected time log state:", existingLog);
-         toast({
-          title: "Unknown Attendance State",
-          description: "Could not determine your current time-in/out status. Please contact support if this persists.",
-          variant: "destructive",
-        });
-      }
-
-    } catch (error: any) {
-      console.error('Error processing scan:', error);
-      toast({
-        title: "Scan Processing Error",
-        description: error.message || "An unexpected error occurred while processing the scan.",
-        variant: "destructive",
-      });
-    } finally {
-      console.log(`handleScan: finally block executing at ${new Date().toISOString()}. Setting scanInProgress to false.`);
-      setScanInProgress(false);
-      
-      setTimeout(() => {
-        if (qrScannerRef.current && isScanning && videoRef.current && videoRef.current.srcObject) {
-          const mediaStream = videoRef.current.srcObject as MediaStream;
-          if (mediaStream.active) {
-            console.log(`handleScan: (setTimeout) Attempting to restart scanner at ${new Date().toISOString()}.`);
-            qrScannerRef.current.start().then(() => {
-              console.log(`handleScan: (setTimeout) QR Scanner restarted successfully at ${new Date().toISOString()}.`);
-            }).catch((e: any) => console.error("handleScan: (setTimeout) Error restarting scanner:", e));
-          } else {
-            console.log("handleScan: (setTimeout) Video stream inactive, not restarting scanner.");
-          }
-        } else {
-          console.log(`handleScan: (setTimeout) Conditions not met to restart scanner at ${new Date().toISOString()}. isScanning: ${isScanning}`);
-        }
-      }, 1500); 
-    }
-  };
-
-  const stopScanning = () => {
-    setIsScanning(false);
-    cleanup();
-  };
-
-  const retryCamera = async () => {
+  const retryCamera = () => {
+    console.log('retryCamera: User triggered retry.');
     setError(null);
-    setIsScanning(true);
+    // scanInProgress should be false before retrying
+    setScanInProgress(false); 
+    setIsScanning(true); // This will trigger startScanner via the useEffect
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-slate-900/95 border-slate-700 backdrop-blur-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-white flex items-center gap-2">
-            <Scan className="w-5 h-5" />
-            QR Code Scanner
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white h-8 w-8 p-0"
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </CardHeader>
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-xl w-full max-w-md relative">
+        <button
+          onClick={stopScanningAndClose}
+          className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          aria-label="Close scanner"
+        >
+          <X size={24} />
+        </button>
+        <h2 className="text-2xl font-semibold mb-4 text-center text-gray-800 dark:text-white">Scan QR Code</h2>
         
-        <CardContent className="space-y-4">
-          {!hasCamera ? (
-            <div className="text-center space-y-4">
-              <div className="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 rounded-full">
-                <AlertCircle className="w-8 h-8 text-red-600" />
-              </div>
-              <div>
-                <p className="text-white font-medium">No Camera Available</p>
-                <p className="text-slate-400 text-sm mt-1">
-                  Camera not supported or available on this device
-                </p>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="text-center space-y-4">
-              <div className="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 rounded-full">
-                <AlertCircle className="w-8 h-8 text-red-600" />
-              </div>
-              <div>
-                <p className="text-white font-medium">Camera Error</p>
-                <p className="text-slate-400 text-sm mt-1">{error}</p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={retryCamera}
-                  variant="outline"
-                  className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800"
-                  disabled={scanInProgress}
-                >
-                  Retry Camera
-                </Button>
-              </div>
-            </div>
-          ) : isScanning ? (
-            <div className="space-y-4">
-              <div className="relative bg-black rounded-lg overflow-hidden aspect-square">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                  style={{ 
-                    minHeight: '300px'
-                  }}
-                />
-                <div className="absolute inset-4 border-2 border-blue-500 rounded-lg pointer-events-none"></div>
-                <div className="absolute bottom-4 left-4 right-4 text-center pointer-events-none">
-                  <p className="text-white text-sm bg-black/70 px-3 py-2 rounded">
-                    {scanInProgress ? 'Processing...' : 'Point camera at QR code'}
-                  </p>
-                </div>
-                {scanInProgress && (
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                    <Loader2 className="w-8 h-8 text-white animate-spin" />
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={stopScanning}
-                  variant="outline"
-                  className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800"
-                  disabled={scanInProgress}
-                >
-                  Stop Camera
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center space-y-4">
-              <div className="flex items-center justify-center w-16 h-16 mx-auto bg-blue-100 rounded-full">
-                <Camera className="w-8 h-8 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-white font-medium">Ready to Scan</p>
-                <p className="text-slate-400 text-sm mt-1">
-                  Click below to start the camera and scan a QR code
-                </p>
-              </div>
-              <Button
-                onClick={() => setIsScanning(true)}
-                className="w-full bg-blue-600 hover:bg-blue-500"
-                disabled={scanInProgress}
-              >
-                <Camera className="w-4 h-4 mr-2" />
-                Start Camera
+        {error && (
+          <div className="my-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+            <p><strong>Error:</strong> {error}</p>
+            { (error.includes("permissions") || error.includes("NotAllowedError") || error.includes("video element")) &&
+              <Button onClick={retryCamera} className="w-full mt-2">
+                Try Again
               </Button>
+            }
+          </div>
+        )}
+
+        <div className="relative w-full aspect-square bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden shadow-inner">
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            playsInline
+            muted
+            style={{ transform: 'scaleX(-1)' }} // Mirror display
+          />
+          {!error && !isScanning && !scannerActive && (
+             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-60">
+                <Loader2 className="w-12 h-12 text-white animate-spin mb-3" />
+                <p className="text-white text-lg">Initializing Camera...</p>
+              </div>
+          )}
+           {isScanning && !error && ( // Visual cue for active scanning area
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div 
+                className="w-[70%] h-[70%] border-4 border-dashed border-green-500 dark:border-green-400 rounded-lg opacity-75"
+                style={{ animation: 'pulse 2s infinite ease-in-out' }}
+              ></div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center">
+          Position the QR code within the frame.
+        </p>
+
+        <Button onClick={stopScanningAndClose} className="w-full mt-4" variant="outline">
+          Cancel
+        </Button>
+      </div>
+      {/* Simple CSS for pulse animation if not using Tailwind's animate-pulse effectively for border */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.75; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.02); }
+        }
+      `}</style>
     </div>
   );
 };
 
-export default QRScanner;
+export default QRScannerComponent;
