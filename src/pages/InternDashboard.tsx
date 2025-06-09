@@ -28,8 +28,14 @@ const InternDashboard = () => {
     fetchTodayStatus();
     fetchTotalHours();
 
+    // Enhanced real-time subscription for immediate updates
     const channel = supabase
-      .channel('time_logs_changes')
+      .channel('intern_dashboard_updates', {
+        config: {
+          broadcast: { self: true },
+          presence: { key: 'intern_dashboard' }
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -38,15 +44,45 @@ const InternDashboard = () => {
           table: 'time_logs'
         },
         (payload) => {
-          console.log('Change received!', payload);
-          fetchTodayStatus();
-          fetchTotalHours();
+          console.log('Time logs change received!', payload);
+          // Immediate refresh of status and hours with shorter delay
+          setTimeout(() => {
+            fetchTodayStatus();
+            fetchTotalHours();
+          }, 100);
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'monthly_salary_history'
+        },
+        (payload) => {
+          console.log('Monthly salary change received!', payload);
+          // Refresh total hours when monthly record updates
+          setTimeout(() => {
+            fetchTotalHours();
+          }, 100);
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to real-time updates');
+        }
+      });
+
+    // Also set up a periodic refresh as backup
+    const intervalId = setInterval(() => {
+      fetchTodayStatus();
+      fetchTotalHours();
+    }, 30000); // Refresh every 30 seconds
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(intervalId);
     };
   }, []);
 
@@ -297,7 +333,14 @@ const InternDashboard = () => {
 
         {showScanner && (
           <QRScanner 
-            onClose={() => setShowScanner(false)} 
+            onClose={() => {
+              setShowScanner(false);
+              // Immediately refresh data after scanner closes
+              setTimeout(() => {
+                fetchTodayStatus();
+                fetchTotalHours();
+              }, 500);
+            }} 
           />
         )}
       </div>

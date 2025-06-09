@@ -217,49 +217,31 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       // Clean up any existing scanner/stream first
       cleanup();
 
-      // Wait a bit for cleanup to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Reduced wait time for faster initialization
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera access not supported on this browser');
       }
 
-      // Mobile-optimized progressive fallback constraints
+      // Optimized progressive fallback constraints - faster initialization
       const constraintOptions = [
-        // First try: Mobile optimized settings
-        {
-          video: {
-            facingMode: { exact: 'environment' },
-            width: { ideal: 640, min: 320, max: 1280 },
-            height: { ideal: 480, min: 240, max: 720 },
-            frameRate: { ideal: 15, max: 30 }
-          }
-        },
-        // Second try: Reduced mobile settings
-        {
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 480, min: 320 },
-            height: { ideal: 360, min: 240 },
-            frameRate: { ideal: 10, max: 20 }
-          }
-        },
-        // Third try: Basic environment camera
+        // First try: Simple environment camera (fastest)
         {
           video: {
             facingMode: 'environment'
           }
         },
-        // Fourth try: User facing camera
+        // Second try: Any camera
+        {
+          video: true
+        },
+        // Third try: User facing camera if environment fails
         {
           video: {
             facingMode: 'user'
           }
-        },
-        // Fifth try: Any camera
-        {
-          video: true
         }
       ];
 
@@ -336,7 +318,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
           // Continue anyway - some browsers work without explicit play
         }
         
-        // Wait for video to be ready with mobile-optimized approach
+        // Wait for video to be ready with faster approach
         console.log('initializeScanner: Waiting for video to be ready');
         await new Promise<void>((resolve, reject) => {
           const video = videoRef.current!;
@@ -345,12 +327,11 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
           const cleanupListeners = () => {
             video.removeEventListener('loadedmetadata', onReady);
             video.removeEventListener('canplay', onReady);
-            video.removeEventListener('loadeddata', onReady);
             video.removeEventListener('error', onError);
           };
           
           const onReady = () => {
-            if (!resolved && video.readyState >= 2) {
+            if (!resolved && video.readyState >= 1) { // Reduced readyState requirement for faster init
               resolved = true;
               cleanupListeners();
               console.log('initializeScanner: Video is ready, readyState:', video.readyState);
@@ -367,13 +348,12 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             }
           };
           
-          // Multiple event listeners for different mobile behaviors
+          // Fewer event listeners for faster initialization
           video.addEventListener('loadedmetadata', onReady);
           video.addEventListener('canplay', onReady);
-          video.addEventListener('loadeddata', onReady);
           video.addEventListener('error', onError);
           
-          // Shorter timeout for mobile - 5 seconds
+          // Shorter timeout for faster user feedback - 3 seconds
           setTimeout(() => {
             if (!resolved) {
               resolved = true;
@@ -381,16 +361,16 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
               console.warn('initializeScanner: Video loading timeout, proceeding anyway');
               resolve(); // Don't reject, try to continue
             }
-          }, 5000);
+          }, 3000);
           
           // Check if already ready
-          if (video.readyState >= 2) {
+          if (video.readyState >= 1) {
             onReady();
           }
         });
 
-        // Additional mobile-specific delay to ensure video stream is stable
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Reduced delay for faster initialization
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Initialize QR Scanner with mobile-optimized settings
         console.log('initializeScanner: Creating QR scanner with mobile optimizations');

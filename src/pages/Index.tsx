@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,18 +7,33 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user, loading: authLoading, isAdmin, signIn } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [requiredHours, setRequiredHours] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true); // Default to true for persistent login
   const [loading, setLoading] = useState(false);
+  const [adminLogin, setAdminLogin] = useState(false); // Local admin checkbox state
   const { toast } = useToast();
+
+  // Auto-redirect if user is already authenticated
+  useEffect(() => {
+    if (!authLoading && user) {
+      console.log('User already authenticated, redirecting...');
+      if (isAdmin) {
+        navigate("/admin");
+      } else {
+        navigate("/intern");
+      }
+    }
+  }, [authLoading, user, isAdmin, navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,40 +92,40 @@ const Index = () => {
         });
 
       } else {
-        // Handle sign in
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        // Handle sign in using the auth hook
+        const { error: signInError } = await signIn(email, password, rememberMe);
 
         if (signInError) {
-          if (signInError.message.includes('Email not confirmed')) {
+          if (signInError.message?.includes('Email not confirmed')) {
             throw new Error('Please check your email to verify your account before signing in.');
           }
           console.error("Signin error:", signInError);
           throw signInError;
         }
 
-        if (!data.user) {
+        // Get fresh user data after sign in
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        
+        if (!currentUser) {
           throw new Error('No user found');
         }
 
-        if (!data.user.email_confirmed_at) {
+        if (!currentUser.email_confirmed_at) {
           throw new Error('Please verify your email address before signing in.');
         }
 
         // Determine if user is admin by email (case-insensitive)
-        const isAdminUser = data.user.email?.toLowerCase().includes('admin');
+        const isAdminUser = currentUser.email?.toLowerCase().includes('admin');
 
         // Navigate based on user type and admin checkbox
-        if (isAdminUser && isAdmin) {
+        if (isAdminUser && adminLogin) {
           navigate("/admin");
-        } else if (!isAdminUser || !isAdmin) {
+        } else if (!isAdminUser || !adminLogin) {
           // Check if user has an intern profile
           const { data: profile, error: profileError } = await supabase
             .from('intern_profiles')
             .select('*')
-            .eq('user_id', data.user.id)
+            .eq('user_id', currentUser.id)
             .maybeSingle();
 
           if (profileError) {
@@ -123,9 +138,9 @@ const Index = () => {
             const { error: createError } = await supabase
               .from('intern_profiles')
               .insert({
-                user_id: data.user.id,
-                name: data.user.email?.split('@')[0] || 'New Intern',
-                email: data.user.email || '',
+                user_id: currentUser.id,
+                name: currentUser.email?.split('@')[0] || 'New Intern',
+                email: currentUser.email || '',
                 required_hours: 120 // Default value
               });
 
@@ -203,9 +218,19 @@ const Index = () => {
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
+                    id="rememberMe"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="rememberMe">Remember me</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
                     id="isAdmin"
-                    checked={isAdmin}
-                    onChange={(e) => setIsAdmin(e.target.checked)}
+                    checked={adminLogin}
+                    onChange={(e) => setAdminLogin(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300"
                   />
                   <Label htmlFor="isAdmin">Login as Admin</Label>
