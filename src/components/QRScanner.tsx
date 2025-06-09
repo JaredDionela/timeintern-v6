@@ -188,17 +188,33 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
       
       if (videoRef.current) {
         qrScannerRef.current = new QrScanner(
-          videoRef.current, 
+          videoRef.current,
           (result) => {
             const qrData = typeof result === 'string' ? result : result.data;
             console.log('QR Code detected:', qrData);
-            handleScan(qrData); 
+            // Ensure qrData is not empty before calling handleScan
+            if (qrData) {
+              handleScan(qrData);
+            } else {
+              console.log('Empty QR data received.');
+            }
           },
           {
-            returnDetailedScanResult: true, 
+            returnDetailedScanResult: true,
             highlightScanRegion: true,
             highlightCodeOutline: true,
-            maxScansPerSecond: 2, 
+            maxScansPerSecond: 2,
+            // calculateScanRegion: (video) => { // Example: scan only center 50%
+            //   const videoWidth = video.videoWidth;
+            //   const videoHeight = video.videoHeight;
+            //   const regionSize = Math.min(videoWidth, videoHeight) * 0.5;
+            //   return {
+            //     x: (videoWidth - regionSize) / 2,
+            //     y: (videoHeight - regionSize) / 2,
+            //     width: regionSize,
+            //     height: regionSize
+            //   };
+            // }
           }
         );
       
@@ -236,6 +252,16 @@ const QRScanner = ({ onClose }: QRScannerProps) => {
 
   const handleScan = async (qrData: string) => {
     if (scanInProgress) return;
+    // Add a check for empty qrData at the beginning of handleScan
+    if (!qrData) {
+      console.log('handleScan called with empty qrData. Aborting.');
+      setScanInProgress(false); // Ensure scanInProgress is reset
+      // Optionally, restart the scanner if it was paused
+      if (qrScannerRef.current && isScanning && videoRef.current && videoRef.current.srcObject && (videoRef.current.srcObject as MediaStream).active) {
+        qrScannerRef.current.start().catch(e => console.error("Error restarting scanner after empty scan:", e));
+      }
+      return;
+    }
     setScanInProgress(true);
 
     if (qrScannerRef.current) {
