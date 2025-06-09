@@ -28,29 +28,11 @@ const Index = () => {
     if (!authLoading && user) {
       console.log('User already authenticated, redirecting...');
       
-      // Verify the user session is still valid before redirecting
-      const verifyAndRedirect = async () => {
-        try {
-          const { data: { user: currentUser }, error } = await supabase.auth.getUser();
-          
-          if (error || !currentUser) {
-            console.error('Invalid session detected, signing out:', error);
-            await supabase.auth.signOut();
-            return;
-          }
-          
-          if (isAdmin) {
-            navigate("/admin");
-          } else {
-            navigate("/intern");
-          }
-        } catch (error) {
-          console.error('Session verification failed:', error);
-          await supabase.auth.signOut();
-        }
-      };
-      
-      verifyAndRedirect();
+      if (isAdmin) {
+        navigate("/admin");
+      } else {
+        navigate("/intern");
+      }
     }
   }, [authLoading, user, isAdmin, navigate]);
 
@@ -127,10 +109,6 @@ const Index = () => {
         
         if (!currentUser) {
           throw new Error('No user found');
-        }
-
-        if (!currentUser.email_confirmed_at) {
-          throw new Error('Please verify your email address before signing in.');
         }
 
         // Determine if user is admin by email (case-insensitive)

@@ -15,35 +15,16 @@ export const useAuth = (): UseAuthReturn => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
+  const [isAdmin, setIsAdmin] = useState(false);  useEffect(() => {
     // Check for existing session on mount
     const getSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (error) {
-          console.error('Error getting session:', error);
-          // Clear any invalid session data
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-          setIsAdmin(false);
-        } else if (session) {
-          // Verify the session is still valid by checking user
-          const { data: { user }, error: userError } = await supabase.auth.getUser();
-          
-          if (userError || !user) {
-            console.error('Session invalid, signing out:', userError);
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-            setIsAdmin(false);
-          } else {
-            setSession(session);
-            setUser(user);
-            setIsAdmin(user?.email?.toLowerCase().includes('admin') || false);
-          }
+        if (session?.user) {
+          setSession(session);
+          setUser(session.user);
+          setIsAdmin(session.user?.email?.toLowerCase().includes('admin') || false);
         } else {
           setSession(null);
           setUser(null);
@@ -51,8 +32,6 @@ export const useAuth = (): UseAuthReturn => {
         }
       } catch (error) {
         console.error('Session check error:', error);
-        // Force sign out on any error
-        await supabase.auth.signOut();
         setSession(null);
         setUser(null);
         setIsAdmin(false);
@@ -61,9 +40,11 @@ export const useAuth = (): UseAuthReturn => {
       }
     };
 
-    getSession();    // Listen for auth changes
+    getSession();
+
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
         
         if (event === 'SIGNED_OUT' || !session) {
@@ -75,38 +56,23 @@ export const useAuth = (): UseAuthReturn => {
           // Clear all auth-related storage
           localStorage.removeItem('rememberMe');
           localStorage.removeItem('supabase.auth.token');
-        } else if (session) {
-          // Verify the session is valid
-          try {
-            const { data: { user }, error } = await supabase.auth.getUser();
-            
-            if (error || !user) {
-              console.error('Invalid session, signing out:', error);
-              await supabase.auth.signOut();
-              return;
-            }
-            
-            setSession(session);
-            setUser(user);
-            setIsAdmin(user?.email?.toLowerCase().includes('admin') || false);
-            setLoading(false);
+        } else if (session?.user) {
+          setSession(session);
+          setUser(session.user);
+          setIsAdmin(session.user?.email?.toLowerCase().includes('admin') || false);
+          setLoading(false);
 
-            // Handle session persistence based on localStorage flag
-            if (event === 'SIGNED_IN') {
-              const rememberMe = localStorage.getItem('rememberMe') === 'true';
-              if (rememberMe) {
-                // Set session to persist longer
-                localStorage.setItem('supabase.auth.token', JSON.stringify({
-                  access_token: session.access_token,
-                  refresh_token: session.refresh_token,
-                  expires_at: session.expires_at,
-                  user: session.user
-                }));
-              }
+          // Handle session persistence
+          if (event === 'SIGNED_IN') {
+            const rememberMe = localStorage.getItem('rememberMe') === 'true';
+            if (rememberMe) {
+              localStorage.setItem('supabase.auth.token', JSON.stringify({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+                expires_at: session.expires_at,
+                user: session.user
+              }));
             }
-          } catch (error) {
-            console.error('Error validating session:', error);
-            await supabase.auth.signOut();
           }
         }
       }

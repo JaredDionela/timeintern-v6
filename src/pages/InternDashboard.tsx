@@ -81,28 +81,17 @@ const InternDashboard = () => {
 
   const checkAuth = async () => {
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (sessionError || !session) {
+      if (!session?.user) {
         console.log('No valid session, redirecting to login');
         navigate('/');
         return;
       }
       
-      // Verify the session by checking user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        console.error('User verification failed:', userError);
-        await supabase.auth.signOut();
-        navigate('/');
-        return;
-      }
-      
-      console.log('Auth check passed for intern:', user.email);
+      console.log('Auth check passed for intern:', session.user.email);
     } catch (error) {
       console.error('Auth check error:', error);
-      await supabase.auth.signOut();
       navigate('/');
     }
   };

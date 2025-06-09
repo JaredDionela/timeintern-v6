@@ -11,11 +11,15 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
     storage: window.localStorage,
-    flowType: 'pkce'
+    flowType: 'pkce',
+    debug: false
   },
   global: {
     headers: {
       'X-Client-Info': 'timeinternv6@1.0.0'
     }
+  },
+  db: {
+    schema: 'public'
   }
 })
