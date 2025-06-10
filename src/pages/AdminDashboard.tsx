@@ -109,6 +109,11 @@ const AdminDashboard = () => {
       <header className="max-w-full mx-auto w-full mb-4 sm:mb-6 relative z-10 bg-slate-800/30 backdrop-blur-md rounded-lg shadow-lg p-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
+            <img 
+        src="/app-logo.png" 
+        alt="TimeIntern Logo" 
+        className="h-16 w-16 object-contain"
+      />
             <Avatar className="h-10 w-10 border-2 border-blue-500">
               <AvatarImage src={adminAvatar} alt={adminName} />
               <AvatarFallback className="bg-blue-600 text-white">
@@ -149,7 +154,12 @@ const AdminDashboard = () => {
         <div className="fixed inset-0 z-40 bg-slate-900/80 backdrop-blur-sm md:hidden" onClick={() => setMobileNavOpen(false)}>
           <div className="fixed top-0 left-0 h-full w-64 bg-slate-800 p-4 shadow-xl z-50" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-white">Navigation</h2>
+              <img 
+        src="/app-logo.png" 
+        alt="TimeIntern Logo" 
+        className="h-16 w-16 object-contain"
+      />
+              <h2 className="text-lg font-semibold text-white">Time Intern</h2>
               <Button variant="ghost" size="icon" onClick={() => setMobileNavOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </Button>

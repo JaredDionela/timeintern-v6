@@ -233,6 +233,7 @@ const InternDashboard = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6 bg-slate-800/30 backdrop-blur-md rounded-lg shadow-lg p-4">
           <div className="flex items-center gap-3">
+            
             <Avatar className="h-10 w-10 border-2 border-blue-500">
               <AvatarImage src={internAvatar} alt={internName} />
               <AvatarFallback className="bg-blue-600 text-white">
@@ -243,7 +244,7 @@ const InternDashboard = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-white">
                 Hi, {internName || 'Intern'}!
               </h1>
-              <p className="text-slate-400">Track your internship progress</p>
+              <p className="text-slate-400">Welcome to Ariva!</p>
             </div>
           </div>
           <Button 
@@ -277,6 +278,12 @@ const InternDashboard = () => {
         <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardContent className="pt-6">
             <div className="space-y-4">
+              <img 
+      src="/app-logo.png" 
+      alt="TimeIntern Logo" 
+      className="h-16 w-16 flex items-center gap-3 mx-auto mb-4 object-contain"
+      
+    />
               {/* Status indicator */}
               <div className="text-center">
                 {isSignedIn ? (
