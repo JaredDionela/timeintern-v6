@@ -23,6 +23,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const healthCheckRef = useRef<NodeJS.Timeout | null>(null);
+  const initializingRef = useRef(false); // Add flag to prevent multiple initializations
   const { toast } = useToast();
 
   const cleanup = useCallback(() => {
@@ -302,6 +303,13 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
   }, [scanInProgress, isScanning, toast, onClose]);
 
   const initializeScanner = useCallback(async () => {
+    // Prevent multiple simultaneous initializations
+    if (initializingRef.current) {
+      console.log('initializeScanner: Already initializing, skipping...');
+      return;
+    }
+    
+    initializingRef.current = true;
     console.log('initializeScanner: Starting camera initialization');
     setError(null);
     setIsInitializing(true);
@@ -311,6 +319,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       console.error('initializeScanner: Video element not available or component unmounted');
       setError("Video element not available.");
       setIsInitializing(false);
+      initializingRef.current = false;
       return;
     }
 
@@ -326,12 +335,28 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         throw new Error('Camera access not supported on this browser');
       }
 
-      // Reset video element completely before starting
+      // Reset video element completely before starting with better handling
       if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.load();
-        // Wait for video reset to complete
-        await new Promise(resolve => setTimeout(resolve, 100));
+        const video = videoRef.current;
+        
+        // Pause any existing playback first
+        try {
+          video.pause();
+        } catch (pauseError) {
+          console.warn('Error pausing video during reset:', pauseError);
+        }
+        
+        // Clear srcObject
+        video.srcObject = null;
+        
+        // Wait for any pending operations to complete
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Only load if component is still mounted
+        if (mountedRef.current) {
+          video.load();
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
       // Optimized progressive fallback constraints - faster initialization
@@ -410,11 +435,16 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         // Force play video immediately on mobile - critical for iOS
         console.log('initializeScanner: Forcing video to play immediately');
         try {
-          const playPromise = video.play();
-          if (playPromise !== undefined) {
-            await playPromise;
+          // Check if there's already a play promise in progress
+          if (video.readyState >= 1) {
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+              await playPromise;
+              console.log('initializeScanner: Video is playing');
+            }
+          } else {
+            console.log('initializeScanner: Video not ready, waiting for loadedmetadata');
           }
-          console.log('initializeScanner: Video is playing');
         } catch (playError) {
           console.warn('initializeScanner: Initial video play failed:', playError);
           // On some mobile browsers, we need user interaction first
@@ -424,7 +454,11 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             setIsInitializing(false);
             return;
           }
-          // Continue anyway - some browsers work without explicit play
+          // For AbortError (interrupted play), we'll continue but won't force play
+          if ((playError as Error).name !== 'AbortError') {
+            throw playError;
+          }
+          console.log('initializeScanner: Play was interrupted, continuing without forcing play');
         }
         
         // Wait for video to be ready with faster approach
@@ -540,6 +574,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       cleanup();
     } finally {
       setIsInitializing(false);
+      initializingRef.current = false;
     }
   }, [cleanup, handleScan]);
 
