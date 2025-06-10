@@ -133,7 +133,8 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             }
           }
         } else if (validation) {
-          const result = validation;
+          // Parse the JSON response
+          const result = typeof validation === 'string' ? JSON.parse(validation) : validation;
           isValid = result.is_valid;
           validationMessage = result.message;
           
@@ -177,7 +178,9 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         if (useError) {
           console.warn('Could not mark QR code as used in database:', useError);
         } else if (useResult) {
-          console.log('QR code marked as used:', useResult);
+          // Parse the JSON response
+          const result = typeof useResult === 'string' ? JSON.parse(useResult) : useResult;
+          console.log('QR code marked as used:', result);
         }
       } catch (useError) {
         console.warn('Error marking QR code as used:', useError);

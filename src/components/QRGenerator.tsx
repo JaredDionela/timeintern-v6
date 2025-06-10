@@ -28,8 +28,10 @@ const QRGenerator = () => {
           console.error('Error creating QR code in database:', error);
           // Fallback to client-side timestamp validation
           console.log(`Generated QR code (fallback): ${newCode}, expires after 5 seconds`);
-        } else {
-          console.log(`Generated QR code in database: ${newCode}, expires at:`, data?.expires_at);
+        } else if (data) {
+          // Handle JSON response from database function
+          const qrResult = typeof data === 'object' ? data : JSON.parse(data as string);
+          console.log(`Generated QR code in database: ${newCode}, expires at:`, qrResult?.expires_at);
         }
       } catch (error) {
         console.error('Error generating QR code:', error);
