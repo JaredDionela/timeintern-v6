@@ -523,7 +523,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             className="w-full h-full object-cover"
             playsInline
             muted
-            style={{ transform: 'scaleX(-1)' }}
+            
           />
           
           {!error && !needsUserInteraction && (isInitializing || !isScanning) && (
