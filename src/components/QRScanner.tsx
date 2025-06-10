@@ -18,27 +18,23 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [needsUserInteraction, setNeedsUserInteraction] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
-  const healthCheckRef = useRef<NodeJS.Timeout | null>(null);
-  const initializingRef = useRef(false); // Add flag to prevent multiple initializations
+  const initializingRef = useRef(false);
+  const initPromiseRef = useRef<Promise<void> | null>(null);
+  
   const { toast } = useToast();
 
   const cleanup = useCallback(() => {
-    console.log('cleanup: Called');
+    console.log('cleanup: Starting cleanup');
     
-    // Clear health check timer
-    if (healthCheckRef.current) {
-      clearInterval(healthCheckRef.current);
-      healthCheckRef.current = null;
-    }
-    
-    // Stop the QR scanner
+    // Stop the QR scanner first
     if (qrScannerRef.current) {
       try {
-        console.log('cleanup: Destroying QrScanner instance.');
+        console.log('cleanup: Destroying QrScanner instance');
         qrScannerRef.current.destroy();
       } catch (err) {
         console.warn('cleanup: Error destroying scanner:', err);
@@ -48,42 +44,45 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
     
     // Stop media stream
     if (streamRef.current) {
-      console.log('cleanup: Stopping media tracks.');
+      console.log('cleanup: Stopping media tracks');
       streamRef.current.getTracks().forEach(track => {
-        track.stop();
+        try {
+          track.stop();
+        } catch (err) {
+          console.warn('cleanup: Error stopping track:', err);
+        }
       });
       streamRef.current = null;
     }
     
-    // Clear video src and reset video element completely
+    // Reset video element
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
-      videoRef.current.pause();
-      videoRef.current.load(); // Reset video element completely
+      const video = videoRef.current;
+      video.srcObject = null;
+      video.pause();
+      video.load();
       
-      // Clear all video attributes that might cause issues
-      videoRef.current.removeAttribute('autoplay');
-      videoRef.current.removeAttribute('webkit-playsinline');
-      videoRef.current.removeAttribute('playsinline');
+      // Clear attributes
+      video.removeAttribute('autoplay');
+      video.removeAttribute('webkit-playsinline');
+      video.removeAttribute('playsinline');
     }
     
-    // Reset all states
+    // Reset states
     setIsScanning(false);
     setError(null);
     setScanInProgress(false);
-    setIsInitializing(false);
-    setNeedsUserInteraction(false);
     
-    console.log('cleanup: Finished.');
+    console.log('cleanup: Cleanup completed');
   }, []);
 
   const handleScan = useCallback(async (qrData: string) => {
     if (scanInProgress || !mountedRef.current) {
-      console.log('handleScan: Scan in progress or component unmounted, ignoring scan');
+      console.log('handleScan: Scan in progress or component unmounted, ignoring');
       return;
     }
 
-    console.log(`handleScan: Called at ${new Date().toISOString()} with data: '${qrData}'`);
+    console.log(`handleScan: Processing QR data: ${qrData}`);
     setScanInProgress(true);
 
     // Pause scanner temporarily
@@ -96,8 +95,6 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
     }
 
     try {
-      console.log(`handleScan: Processing QR data: ${qrData}`);
-      
       // Validate QR code format
       if (!qrData.startsWith("attendance-")) {
         toast({ 
@@ -108,7 +105,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         return;
       }
 
-      // First try database validation (with expiration tracking)
+      // Database validation with fallback
       let isValid = false;
       let validationMessage = "";
 
@@ -118,7 +115,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         });
 
         if (validationError) {
-          console.warn('Database validation failed, falling back to timestamp validation:', validationError);
+          console.warn('Database validation failed, using fallback:', validationError);
           
           // Fallback to client-side timestamp validation
           const parts = qrData.split('-');
@@ -134,12 +131,10 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             }
           }
         } else if (validation) {
-          // Parse the JSON response
           const result = typeof validation === 'string' ? JSON.parse(validation) : validation;
           isValid = result.is_valid;
           validationMessage = result.message;
-          
-          console.log(`Database validation result:`, result);
+          console.log('Database validation result:', result);
         }
       } catch (validationError) {
         console.warn('QR validation error, using fallback:', validationError);
@@ -170,16 +165,15 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
 
       console.log(`handleScan: QR code is valid - ${validationMessage}`);
 
-      // Mark QR code as used in database (if database is available)
+      // Mark QR code as used in database
       try {
         const { data: useResult, error: useError } = await supabase.rpc('use_qr_code', {
           qr_data: qrData
         });
 
         if (useError) {
-          console.warn('Could not mark QR code as used in database:', useError);
+          console.warn('Could not mark QR code as used:', useError);
         } else if (useResult) {
-          // Parse the JSON response
           const result = typeof useResult === 'string' ? JSON.parse(useResult) : useResult;
           console.log('QR code marked as used:', result);
         }
@@ -187,7 +181,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         console.warn('Error marking QR code as used:', useError);
       }
 
-      // Check if user is authenticated
+      // Check authentication
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
@@ -200,6 +194,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         return;
       }
 
+      // Handle time logging
       const today = getLocalDateString();
       const { data: existingLog, error: fetchError } = await supabase
         .from('time_logs')
@@ -285,519 +280,208 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       if (mountedRef.current) {
         setScanInProgress(false);
         
-        // Resume scanner if still mounted and not closing
-        if (qrScannerRef.current && !scanInProgress) {
-          try {
-            // Wait a moment before resuming to prevent immediate re-scan
-            setTimeout(() => {
-              if (qrScannerRef.current && mountedRef.current) {
-                qrScannerRef.current.start();
-              }
-            }, 1000);
-          } catch (resumeError) {
-            console.warn('handleScan: Error resuming scanner:', resumeError);
+        // Resume scanner after a delay
+        setTimeout(() => {
+          if (qrScannerRef.current && mountedRef.current && !scanInProgress) {
+            try {
+              qrScannerRef.current.start();
+            } catch (resumeError) {
+              console.warn('handleScan: Error resuming scanner:', resumeError);
+            }
           }
-        }
+        }, 1000);
       }
     }
-  }, [scanInProgress, isScanning, toast, onClose]);
+  }, [scanInProgress, toast, onClose]);
 
   const initializeScanner = useCallback(async () => {
     // Prevent multiple simultaneous initializations
     if (initializingRef.current) {
-      console.log('initializeScanner: Already initializing, skipping...');
-      return;
-    }
-    
-    initializingRef.current = true;
-    console.log('initializeScanner: Starting camera initialization');
-    setError(null);
-    setIsInitializing(true);
-    setNeedsUserInteraction(false);
-
-    if (!videoRef.current || !mountedRef.current) {
-      console.error('initializeScanner: Video element not available or component unmounted');
-      setError("Video element not available.");
-      setIsInitializing(false);
-      initializingRef.current = false;
+      console.log('initializeScanner: Already initializing, waiting for current initialization');
+      if (initPromiseRef.current) {
+        await initPromiseRef.current;
+      }
       return;
     }
 
-    try {
-      // Clean up any existing scanner/stream first
-      cleanup();
-
-      // Wait longer for cleanup to complete, especially important for mobile and re-initialization
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Check if getUserMedia is available
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Camera access not supported on this browser');
-      }
-
-      // Reset video element completely before starting with better handling
-      if (videoRef.current) {
-        const video = videoRef.current;
-        
-        // Pause any existing playback first
-        try {
-          video.pause();
-        } catch (pauseError) {
-          console.warn('Error pausing video during reset:', pauseError);
-        }
-        
-        // Clear srcObject
-        video.srcObject = null;
-        
-        // Wait for any pending operations to complete
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        // Only load if component is still mounted
-        if (mountedRef.current) {
-          video.load();
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      // Optimized progressive fallback constraints - faster initialization
-      const constraintOptions = [
-        // First try: Simple environment camera (fastest)
-        {
-          video: {
-            facingMode: 'environment'
-          }
-        },
-        // Second try: Any camera
-        {
-          video: true
-        },
-        // Third try: User facing camera if environment fails
-        {
-          video: {
-            facingMode: 'user'
-          }
-        }
-      ];
-
-      let stream: MediaStream | null = null;
-      let lastError: Error | null = null;
-
-      console.log('initializeScanner: Trying camera access with fallback constraints');
+    // Create initialization promise
+    const initPromise = (async () => {
+      initializingRef.current = true;
+      console.log('initializeScanner: Starting initialization');
       
-      for (const constraints of constraintOptions) {
-        try {
-          console.log('initializeScanner: Trying constraints:', constraints);
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          if (stream) {
-            console.log('initializeScanner: Camera access successful');
-            break;
-          }
-        } catch (err) {
-          console.warn('initializeScanner: Constraint failed:', err);
-          lastError = err as Error;
-          continue;
-        }
-      }
+      setError(null);
+      setIsInitializing(true);
+      setNeedsUserInteraction(false);
 
-      if (!stream) {
-        throw lastError || new Error('Failed to access camera with all constraint options');
-      }
-      
-      if (!mountedRef.current) {
-        // Component was unmounted during async operation
-        stream.getTracks().forEach(track => track.stop());
+      if (!videoRef.current || !mountedRef.current) {
+        console.error('initializeScanner: Video element not available or component unmounted');
+        setError("Video element not available.");
+        setIsInitializing(false);
+        initializingRef.current = false;
         return;
       }
 
-      streamRef.current = stream;
-      
-      if (videoRef.current) {
-        // Set video properties for maximum mobile compatibility
-        const video = videoRef.current;
-        video.srcObject = stream;
-        video.muted = true;
-        video.playsInline = true;
-        video.autoplay = true;
-        video.controls = false;
-        video.defaultMuted = true;
-        
-        // Critical mobile attributes
-        video.setAttribute('webkit-playsinline', 'true');
-        video.setAttribute('playsinline', 'true');
-        video.setAttribute('muted', 'true');
-        video.setAttribute('autoplay', 'true');
-        
-        // Force video dimensions to prevent mobile layout issues
-        video.style.width = '100%';
-        video.style.height = '100%';
-        video.style.objectFit = 'cover';
-        
-        // Force play video immediately on mobile - critical for iOS
-        console.log('initializeScanner: Forcing video to play immediately');
-        try {
-          // Check if there's already a play promise in progress
-          if (video.readyState >= 1) {
-            const playPromise = video.play();
-            if (playPromise !== undefined) {
-              await playPromise;
-              console.log('initializeScanner: Video is playing');
-            }
-          } else {
-            console.log('initializeScanner: Video not ready, waiting for loadedmetadata');
-          }
-        } catch (playError) {
-          console.warn('initializeScanner: Initial video play failed:', playError);
-          // On some mobile browsers, we need user interaction first
-          if ((playError as Error).name === 'NotAllowedError') {
-            console.log('initializeScanner: Requiring user interaction for video play');
-            setNeedsUserInteraction(true);
-            setIsInitializing(false);
-            return;
-          }
-          // For AbortError (interrupted play), we'll continue but won't force play
-          if ((playError as Error).name !== 'AbortError') {
-            throw playError;
-          }
-          console.log('initializeScanner: Play was interrupted, continuing without forcing play');
-        }
-        
-        // Wait for video to be ready with faster approach
-        console.log('initializeScanner: Waiting for video to be ready');
-        await new Promise<void>((resolve, reject) => {
-          const video = videoRef.current!;
-          let resolved = false;
-          
-          const cleanupListeners = () => {
-            video.removeEventListener('loadedmetadata', onReady);
-            video.removeEventListener('canplay', onReady);
-            video.removeEventListener('error', onError);
-          };
-          
-          const onReady = () => {
-            if (!resolved && video.readyState >= 1) { // Reduced readyState requirement for faster init
-              resolved = true;
-              cleanupListeners();
-              console.log('initializeScanner: Video is ready, readyState:', video.readyState);
-              resolve();
-            }
-          };
-          
-          const onError = (e: Event) => {
-            if (!resolved) {
-              resolved = true;
-              cleanupListeners();
-              console.error('initializeScanner: Video error event:', e);
-              reject(new Error('Video failed to load'));
-            }
-          };
-          
-          // Fewer event listeners for faster initialization
-          video.addEventListener('loadedmetadata', onReady);
-          video.addEventListener('canplay', onReady);
-          video.addEventListener('error', onError);
-          
-          // Shorter timeout for faster user feedback - 3 seconds
-          setTimeout(() => {
-            if (!resolved) {
-              resolved = true;
-              cleanupListeners();
-              console.warn('initializeScanner: Video loading timeout, proceeding anyway');
-              resolve(); // Don't reject, try to continue
-            }
-          }, 3000);
-          
-          // Check if already ready
-          if (video.readyState >= 1) {
-            onReady();
-          }
-        });
-
-        // Reduced delay for faster initialization
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Initialize QR Scanner with mobile-optimized settings
-        console.log('initializeScanner: Creating QR scanner with mobile optimizations');
-        qrScannerRef.current = new QrScanner(
-          video,
-          (result: QrScannerScanResult | string) => {
-            let qrData: string;
-            if (typeof result === 'string') {
-              qrData = result;
-            } else if (result && typeof result.data === 'string') {
-              qrData = result.data;
-            } else {
-              console.warn('Received scan result in unexpected format:', result);
-              return;
-            }
-            
-            console.log(`QR Code detected: ${qrData}`);
-            if (qrData && qrData.trim() !== "") {
-              handleScan(qrData);
-            }
-          },
-          {
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            preferredCamera: 'environment',
-            maxScansPerSecond: 2, // Lower for mobile performance
-            returnDetailedScanResult: false
-          }
-        );
-
-        console.log('initializeScanner: Starting QR scanner');
-        await qrScannerRef.current.start();
-        setIsScanning(true);
-        console.log('initializeScanner: QR scanner started successfully');
-        
-        // Start health check mechanism for mobile reliability
-        startHealthCheck();
-      }
-    } catch (err) {
-      console.error('initializeScanner: Error initializing scanner:', err);
-      let message = "Failed to start QR scanner.";
-      if (err instanceof Error) {
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          message = 'Camera permission denied. Please allow camera access in your browser settings and try again.';
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          message = 'No camera found. Please ensure your device has a camera.';
-        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-          message = 'Camera is already in use by another application. Please close other camera apps and try again.';
-        } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
-          message = 'Camera constraints not supported. Trying to use any available camera.';
-        } else if (err.message.includes('timeout')) {
-          message = 'Camera initialization timeout. Please try again.';
-        } else {
-          message = `Camera error: ${err.message}`;
-        }
-      }
-      setError(message);
-      cleanup();
-    } finally {
-      setIsInitializing(false);
-      initializingRef.current = false;
-    }
-  }, [cleanup, handleScan]);
-
-  // Health check mechanism to ensure scanner stays active on mobile
-  const startHealthCheck = useCallback(() => {
-    // Clear any existing health check
-    if (healthCheckRef.current) {
-      clearInterval(healthCheckRef.current);
-    }
-    
-    console.log('startHealthCheck: Starting scanner health monitoring');
-    healthCheckRef.current = setInterval(() => {
-      if (!mountedRef.current || !qrScannerRef.current || !isScanning) {
-        return;
-      }
-      
       try {
-        // Check if video stream is still active
-        const video = videoRef.current;
-        if (!video || !streamRef.current) {
-          console.warn('healthCheck: Video or stream missing, reinitializing');
-          initializeScanner();
+        // Clean up first
+        cleanup();
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (!mountedRef.current) return;
+
+        // Check camera support
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Camera access not supported on this browser');
+        }
+
+        // Reset video element
+        if (videoRef.current) {
+          const video = videoRef.current;
+          video.pause();
+          video.srcObject = null;
+          video.load();
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        // Try to get camera stream
+        const constraints = { video: { facingMode: 'environment' } };
+        let stream: MediaStream;
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          console.warn('Environment camera failed, trying any camera:', err);
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+
+        if (!mountedRef.current) {
+          stream.getTracks().forEach(track => track.stop());
           return;
         }
-        
-        // Check if video is playing
-        if (video.paused || video.ended) {
-          console.warn('healthCheck: Video paused or ended, attempting to restart');
-          video.play().catch((err) => {
-            console.warn('healthCheck: Failed to restart video:', err);
-            initializeScanner();
+
+        streamRef.current = stream;
+
+        // Setup video
+        if (videoRef.current) {
+          const video = videoRef.current;
+          video.srcObject = stream;
+          video.muted = true;
+          video.playsInline = true;
+          video.autoplay = true;
+          
+          // Mobile attributes
+          video.setAttribute('webkit-playsinline', 'true');
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('muted', 'true');
+          
+          // Wait for video to be ready
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Video initialization timeout'));
+            }, 5000);
+
+            const onReady = () => {
+              clearTimeout(timeout);
+              video.removeEventListener('loadedmetadata', onReady);
+              video.removeEventListener('canplay', onReady);
+              resolve();
+            };
+
+            video.addEventListener('loadedmetadata', onReady);
+            video.addEventListener('canplay', onReady);
+
+            if (video.readyState >= 1) {
+              onReady();
+            }
           });
-          return;
+
+          if (!mountedRef.current) return;
+
+          // Initialize QR Scanner
+          qrScannerRef.current = new QrScanner(
+            video,
+            (result: QrScannerScanResult | string) => {
+              const qrData = typeof result === 'string' ? result : result.data;
+              if (qrData && qrData.trim()) {
+                handleScan(qrData);
+              }
+            },
+            {
+              highlightScanRegion: true,
+              highlightCodeOutline: true,
+              preferredCamera: 'environment',
+              maxScansPerSecond: 1,
+              returnDetailedScanResult: false
+            }
+          );
+
+          await qrScannerRef.current.start();
+          setIsScanning(true);
+          console.log('initializeScanner: QR scanner started successfully');
         }
+      } catch (err) {
+        console.error('initializeScanner: Error:', err);
+        let message = "Failed to start QR scanner.";
         
-        // Check if stream tracks are active
-        const tracks = streamRef.current.getTracks();
-        const activeVideoTracks = tracks.filter(track => track.kind === 'video' && track.readyState === 'live');
-        
-        if (activeVideoTracks.length === 0) {
-          console.warn('healthCheck: No active video tracks, reinitializing');
-          initializeScanner();
-          return;
-        }
-        
-        // Verify scanner is not paused/stopped (if we can check)
-        if (qrScannerRef.current && 'hasCamera' in qrScannerRef.current) {
-          const hasCamera = (qrScannerRef.current as any).hasCamera;
-          if (!hasCamera) {
-            console.warn('healthCheck: Scanner reports no camera, reinitializing');
-            initializeScanner();
-            return;
+        if (err instanceof Error) {
+          if (err.name === 'NotAllowedError') {
+            message = 'Camera permission denied. Please allow camera access and try again.';
+          } else if (err.name === 'NotFoundError') {
+            message = 'No camera found. Please ensure your device has a camera.';
+          } else if (err.name === 'NotReadableError') {
+            message = 'Camera is already in use. Please close other camera apps and try again.';
+          } else {
+            message = `Camera error: ${err.message}`;
           }
         }
         
-        console.log('healthCheck: Scanner appears healthy');
-      } catch (err) {
-        console.error('healthCheck: Error during health check:', err);
-        // If health check itself fails, try to reinitialize
-        initializeScanner();
+        setError(message);
+        cleanup();
+      } finally {
+        setIsInitializing(false);
+        initializingRef.current = false;
+        initPromiseRef.current = null;
       }
-    }, 10000); // Check every 10 seconds
-  }, [isScanning, initializeScanner]);
+    })();
 
-  // Stop health check
-  const stopHealthCheck = useCallback(() => {
-    if (healthCheckRef.current) {
-      console.log('stopHealthCheck: Stopping health monitoring');
-      clearInterval(healthCheckRef.current);
-      healthCheckRef.current = null;
-    }
-  }, []);
+    initPromiseRef.current = initPromise;
+    await initPromise;
+  }, [cleanup, handleScan]);
 
   // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      stopHealthCheck();
       cleanup();
     };
-  }, [cleanup, stopHealthCheck]);
+  }, [cleanup]);
 
-  // Initialize scanner when component mounts
+  // Initialize scanner once on mount
   useEffect(() => {
+    initializeScanner();
+  }, []); // Empty dependency array - only run once on mount
+
+  // Handle close
+  const stopScanningAndClose = useCallback(() => {
+    console.log('stopScanningAndClose: User closed scanner');
+    cleanup();
+    onClose();
+  }, [cleanup, onClose]);
+
+  // Handle retry
+  const retryCamera = useCallback(() => {
+    console.log('retryCamera: User requested retry');
+    setError(null);
+    setRetryCount(prev => prev + 1);
     initializeScanner();
   }, [initializeScanner]);
 
-  // Handle visibility change (browser tab focus/blur) - Enhanced for mobile
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log('Page hidden, pausing scanner');
-        if (qrScannerRef.current) {
-          try {
-            qrScannerRef.current.pause();
-          } catch (err) {
-            console.warn('Error pausing scanner on visibility change:', err);
-          }
-        }
-      } else {
-        console.log('Page visible, restarting scanner');
-        if (qrScannerRef.current && mountedRef.current) {
-          setTimeout(() => {
-            if (qrScannerRef.current && mountedRef.current) {
-              try {
-                qrScannerRef.current.start();
-              } catch (err) {
-                console.warn('Error restarting scanner on visibility change:', err);
-                // If restart fails, reinitialize
-                initializeScanner();
-              }
-            }
-          }, 300); // Increased delay for mobile
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [initializeScanner]);
-
-  // Enhanced mobile focus/blur handling
-  useEffect(() => {
-    const handleFocus = () => {
-      console.log('Window focused, ensuring scanner is active');
-      if (qrScannerRef.current && mountedRef.current) {
-        setTimeout(() => {
-          if (qrScannerRef.current && mountedRef.current) {
-            try {
-              qrScannerRef.current.start();
-            } catch (err) {
-              console.warn('Error starting scanner on focus:', err);
-              initializeScanner();
-            }
-          }
-        }, 500); // Longer delay for mobile stability
-      }
-    };
-
-    const handleBlur = () => {
-      console.log('Window blurred');
-      // On mobile, brief pauses can help with resource management
-      if (qrScannerRef.current) {
-        setTimeout(() => {
-          if (qrScannerRef.current && document.hidden) {
-            try {
-              qrScannerRef.current.pause();
-            } catch (err) {
-              console.warn('Error pausing scanner on blur:', err);
-            }
-          }
-        }, 1000);
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-    
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, [initializeScanner]);
-
-  // Mobile-specific orientation change handler
-  useEffect(() => {
-    const handleOrientationChange = () => {
-      console.log('Orientation changed, reinitializing scanner');
-      setTimeout(() => {
-        if (mountedRef.current) {
-          initializeScanner();
-        }
-      }, 1000); // Wait for orientation change to complete
-    };
-
-    // Listen for orientation changes on mobile
-    window.addEventListener('orientationchange', handleOrientationChange);
-    window.addEventListener('resize', handleOrientationChange);
-    
-    return () => {
-      window.removeEventListener('orientationchange', handleOrientationChange);
-      window.removeEventListener('resize', handleOrientationChange);
-    };
-  }, [initializeScanner]);
-
-  const stopScanningAndClose = useCallback(() => {
-    console.log('stopScanningAndClose: User triggered stop.');
-    setIsScanning(false);
-    
-    // Ensure complete cleanup before closing
-    cleanup();
-    
-    // Call onClose with a small delay to ensure cleanup is complete
-    setTimeout(() => {
-      onClose();
-    }, 200);
-  }, [cleanup, onClose]);
-
-  const retryCamera = useCallback(() => {
-    console.log('retryCamera: User triggered retry.');
-    setError(null);
-    setScanInProgress(false); 
-    setNeedsUserInteraction(false);
-    setRetryCount(prev => prev + 1);
-    
-    // Small delay to ensure UI updates
-    setTimeout(() => {
-      initializeScanner();
-    }, 200);
-  }, [initializeScanner]);
-
+  // Handle manual start
   const startManually = useCallback(() => {
-    console.log('startManually: User triggered manual start.');
+    console.log('startManually: User granted permission');
     setNeedsUserInteraction(false);
     setError(null);
-    
-    // Small delay to ensure UI updates
-    setTimeout(() => {
-      initializeScanner();
-    }, 200);
+    initializeScanner();
   }, [initializeScanner]);
 
   return (
@@ -810,7 +494,10 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         >
           <X size={24} />
         </button>
-        <h2 className="text-2xl font-semibold mb-4 text-center text-gray-800 dark:text-white">Scan QR Code</h2>
+        
+        <h2 className="text-2xl font-semibold mb-4 text-center text-gray-800 dark:text-white">
+          Scan QR Code
+        </h2>
         
         {error && (
           <div className="my-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
@@ -836,15 +523,17 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             className="w-full h-full object-cover"
             playsInline
             muted
-            style={{ transform: 'scaleX(-1)' }} // Mirror display
+            style={{ transform: 'scaleX(-1)' }}
           />
+          
           {!error && !needsUserInteraction && (isInitializing || !isScanning) && (
-             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-60">
-                <Loader2 className="w-12 h-12 text-white animate-spin mb-3" />
-                <p className="text-white text-lg">Initializing Camera...</p>
-              </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-60">
+              <Loader2 className="w-12 h-12 text-white animate-spin mb-3" />
+              <p className="text-white text-lg">Initializing Camera...</p>
+            </div>
           )}
-           {isScanning && !error && ( // Visual cue for active scanning area
+          
+          {isScanning && !error && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div 
                 className="w-[70%] h-[70%] border-4 border-dashed border-green-500 dark:border-green-400 rounded-lg opacity-75"
@@ -862,7 +551,7 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
           Cancel
         </Button>
       </div>
-      {/* Simple CSS for pulse animation if not using Tailwind's animate-pulse effectively for border */}
+      
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 0.75; transform: scale(1); }
