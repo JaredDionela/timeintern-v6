@@ -109,7 +109,7 @@ const AdminDashboard = () => {
       <header className="max-w-full mx-auto w-full mb-4 sm:mb-6 relative z-10 bg-slate-800/30 backdrop-blur-md rounded-lg shadow-lg p-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-           
+            
             <Avatar className="h-10 w-10 border-2 border-blue-500">
               <AvatarImage src={adminAvatar} alt={adminName} />
               <AvatarFallback className="bg-blue-600 text-white">
