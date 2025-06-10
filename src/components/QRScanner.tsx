@@ -54,10 +54,24 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       streamRef.current = null;
     }
     
-    // Clear video src
+    // Clear video src and reset video element completely
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.pause();
+      videoRef.current.load(); // Reset video element completely
+      
+      // Clear all video attributes that might cause issues
+      videoRef.current.removeAttribute('autoplay');
+      videoRef.current.removeAttribute('webkit-playsinline');
+      videoRef.current.removeAttribute('playsinline');
     }
+    
+    // Reset all states
+    setIsScanning(false);
+    setError(null);
+    setScanInProgress(false);
+    setIsInitializing(false);
+    setNeedsUserInteraction(false);
     
     console.log('cleanup: Finished.');
   }, []);
@@ -82,6 +96,8 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
 
     try {
       console.log(`handleScan: Processing QR data: ${qrData}`);
+      
+      // Validate QR code format
       if (!qrData.startsWith("attendance-")) {
         toast({ 
           title: "Invalid QR Code", 
@@ -91,11 +107,90 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // First try database validation (with expiration tracking)
+      let isValid = false;
+      let validationMessage = "";
+
+      try {
+        const { data: validation, error: validationError } = await supabase.rpc('validate_qr_code', {
+          qr_data: qrData
+        });
+
+        if (validationError) {
+          console.warn('Database validation failed, falling back to timestamp validation:', validationError);
+          
+          // Fallback to client-side timestamp validation
+          const parts = qrData.split('-');
+          if (parts.length >= 2) {
+            const timestamp = parseInt(parts[1]);
+            if (!isNaN(timestamp)) {
+              const now = Date.now();
+              const qrAge = now - timestamp;
+              const maxAge = 5000; // 5 seconds
+              
+              isValid = qrAge <= maxAge;
+              validationMessage = isValid ? "Valid (timestamp)" : "Expired (timestamp)";
+            }
+          }
+        } else if (validation) {
+          const result = validation;
+          isValid = result.is_valid;
+          validationMessage = result.message;
+          
+          console.log(`Database validation result:`, result);
+        }
+      } catch (validationError) {
+        console.warn('QR validation error, using fallback:', validationError);
+        
+        // Fallback validation
+        const parts = qrData.split('-');
+        if (parts.length >= 2) {
+          const timestamp = parseInt(parts[1]);
+          if (!isNaN(timestamp)) {
+            const now = Date.now();
+            const qrAge = now - timestamp;
+            const maxAge = 5000; // 5 seconds
+            
+            isValid = qrAge <= maxAge;
+            validationMessage = isValid ? "Valid (fallback)" : "Expired (fallback)";
+          }
+        }
+      }
+
+      if (!isValid) {
+        toast({ 
+          title: "Invalid QR Code", 
+          description: validationMessage || "This QR code has expired or is invalid.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      console.log(`handleScan: QR code is valid - ${validationMessage}`);
+
+      // Mark QR code as used in database (if database is available)
+      try {
+        const { data: useResult, error: useError } = await supabase.rpc('use_qr_code', {
+          qr_data: qrData
+        });
+
+        if (useError) {
+          console.warn('Could not mark QR code as used in database:', useError);
+        } else if (useResult) {
+          console.log('QR code marked as used:', useResult);
+        }
+      } catch (useError) {
+        console.warn('Error marking QR code as used:', useError);
+      }
+
+      // Check if user is authenticated
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error("handleScan: User not authenticated:", userError);
         toast({ 
           title: "Authentication Error", 
-          description: "You must be logged in to record attendance.", 
+          description: "You must be logged in to scan QR codes.", 
           variant: "destructive" 
         });
         return;
@@ -136,10 +231,9 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             .eq('id', existingLog.id);
 
           if (updateError) {
-            console.error("Time out update error:", updateError);
             toast({ 
               title: "Time Out Error", 
-              description: `Failed to record your time out: ${updateError.message || 'Unknown error'}`, 
+              description: "Failed to record your time out.", 
               variant: "destructive" 
             });
           } else {
@@ -187,16 +281,19 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       if (mountedRef.current) {
         setScanInProgress(false);
         
-        // Restart scanner after a brief delay
-        setTimeout(() => {
-          if (qrScannerRef.current && isScanning && mountedRef.current) {
-            try {
-              qrScannerRef.current.start();
-            } catch (err) {
-              console.error('Error restarting scanner:', err);
-            }
+        // Resume scanner if still mounted and not closing
+        if (qrScannerRef.current && !scanInProgress) {
+          try {
+            // Wait a moment before resuming to prevent immediate re-scan
+            setTimeout(() => {
+              if (qrScannerRef.current && mountedRef.current) {
+                qrScannerRef.current.start();
+              }
+            }, 1000);
+          } catch (resumeError) {
+            console.warn('handleScan: Error resuming scanner:', resumeError);
           }
-        }, 1000);
+        }
       }
     }
   }, [scanInProgress, isScanning, toast, onClose]);
@@ -218,12 +315,20 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
       // Clean up any existing scanner/stream first
       cleanup();
 
-      // Reduced wait time for faster initialization
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait longer for cleanup to complete, especially important for mobile and re-initialization
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera access not supported on this browser');
+      }
+
+      // Reset video element completely before starting
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.load();
+        // Wait for video reset to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       // Optimized progressive fallback constraints - faster initialization
@@ -620,27 +725,42 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
     };
   }, [initializeScanner]);
 
-  const stopScanningAndClose = () => {
+  const stopScanningAndClose = useCallback(() => {
     console.log('stopScanningAndClose: User triggered stop.');
     setIsScanning(false);
-    stopHealthCheck();
-    onClose();
-  };
+    
+    // Ensure complete cleanup before closing
+    cleanup();
+    
+    // Call onClose with a small delay to ensure cleanup is complete
+    setTimeout(() => {
+      onClose();
+    }, 200);
+  }, [cleanup, onClose]);
 
-  const retryCamera = () => {
+  const retryCamera = useCallback(() => {
     console.log('retryCamera: User triggered retry.');
     setError(null);
     setScanInProgress(false); 
     setNeedsUserInteraction(false);
-    initializeScanner();
-  };
+    setRetryCount(prev => prev + 1);
+    
+    // Small delay to ensure UI updates
+    setTimeout(() => {
+      initializeScanner();
+    }, 200);
+  }, [initializeScanner]);
 
-  const startManually = () => {
+  const startManually = useCallback(() => {
     console.log('startManually: User triggered manual start.');
     setNeedsUserInteraction(false);
     setError(null);
-    initializeScanner();
-  };
+    
+    // Small delay to ensure UI updates
+    setTimeout(() => {
+      initializeScanner();
+    }, 200);
+  }, [initializeScanner]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-50 p-4">

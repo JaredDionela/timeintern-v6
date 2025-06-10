@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { RefreshCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const QRGenerator = () => {
   const [qrCode, setQrCode] = useState("");
@@ -9,12 +10,31 @@ const QRGenerator = () => {
   const [qrUrl, setQrUrl] = useState("");
 
   useEffect(() => {
-    const generateQR = () => {
+    const generateQR = async () => {
       const timestamp = Date.now();
       const randomBytes = new Uint8Array(16);
       crypto.getRandomValues(randomBytes);
       const randomId = Array.from(randomBytes, byte => byte.toString(16).padStart(2, '0')).join('');
       const newCode = `attendance-${timestamp}-${randomId}`;
+      
+      try {
+        // Create QR code in database with expiration
+        const { data, error } = await supabase.rpc('create_qr_code', {
+          qr_data: newCode,
+          expiry_seconds: 5
+        });
+
+        if (error) {
+          console.error('Error creating QR code in database:', error);
+          // Fallback to client-side timestamp validation
+          console.log(`Generated QR code (fallback): ${newCode}, expires after 5 seconds`);
+        } else {
+          console.log(`Generated QR code in database: ${newCode}, expires at:`, data?.expires_at);
+        }
+      } catch (error) {
+        console.error('Error generating QR code:', error);
+      }
+      
       setQrCode(newCode);
       setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(newCode)}&size=200x200`);
       setTimeLeft(5);

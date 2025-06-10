@@ -72,6 +72,36 @@ export type Database = {
         }
         Relationships: []
       }
+      qr_codes: {
+        Row: {
+          created_at: string
+          data: string
+          expires_at: string
+          id: string
+          is_used: boolean
+          updated_at: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          expires_at: string
+          id?: string
+          is_used?: boolean
+          updated_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          expires_at?: string
+          id?: string
+          is_used?: boolean
+          updated_at?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       time_logs: {
         Row: {
           created_at: string
@@ -110,7 +140,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_qr_code: {
+        Args: {
+          qr_data: string
+          expiry_seconds?: number
+        }
+        Returns: Json // JSON type instead of object
+      }
+      validate_qr_code: {
+        Args: {
+          qr_data: string
+        }
+        Returns: Json // JSON type instead of object
+      }
+      use_qr_code: {
+        Args: {
+          qr_data: string
+        }
+        Returns: Json // JSON type instead of object
+      }
     }
     Enums: {
       [_ in never]: never
@@ -132,7 +180,7 @@ export type Tables<
   }
     ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never,
 > = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
   ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {

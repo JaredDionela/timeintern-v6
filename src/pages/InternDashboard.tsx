@@ -337,12 +337,15 @@ const InternDashboard = () => {
         {showScanner && (
           <QRScanner 
             onClose={() => {
+              console.log('QR Scanner closing, refreshing data...');
               setShowScanner(false);
-              // Immediately refresh data after scanner closes
+              
+              // Add a small delay to ensure camera resources are fully released
               setTimeout(() => {
+                console.log('QR Scanner fully closed, refreshing data...');
                 fetchTodayStatus();
                 fetchTotalHours();
-              }, 500);
+              }, 800); // Increased delay to ensure camera cleanup
             }} 
           />
         )}
