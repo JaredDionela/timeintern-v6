@@ -368,9 +368,7 @@ const InternDashboard = () => {
         <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-white">Monthly Earnings</CardTitle>
-            <CardDescription className="text-slate-400">
-              Fixed ₱200 per day worked, regardless of hours.
-            </CardDescription>
+
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-green-400">
