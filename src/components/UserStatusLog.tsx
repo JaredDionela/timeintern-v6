@@ -230,7 +230,7 @@ const UserStatusLog = () => {
     const csvHeaders = [
       'Name', 'Email', 'Online Status', 'Progress Status', 
       'Regular Hours', 'Overtime Hours', 'WFH Hours', 'Total Hours', 
-      'Required Hours', 'Salary (Regular Days Only)', 'Last Activity'
+      'Required Hours', 'Salary (Tiered: ₱200/8+ hrs, ₱100/4-7.99 hrs)', 'Last Activity'
     ];
     
     const csvData = filteredInterns.map(intern => [
@@ -266,8 +266,10 @@ const UserStatusLog = () => {
   };
 
   const calculateSalary = (daysWorked: number) => {
-    // FIXED DAILY SALARY: ₱200 per day worked, regardless of hours
-    const dailyRate = 200;
+    // TIERED DAILY SALARY STRUCTURE:
+    // This is for display purposes only - actual calculation is done in the database
+    // ₱200 for 8+ hours per day, ₱100 for 4-7.99 hours per day
+    const dailyRate = 200; // Maximum daily rate for reference
     return daysWorked * dailyRate;
   };
 
@@ -521,7 +523,10 @@ const UserStatusLog = () => {
                       <TableCell>
                         <span className="text-green-400 font-bold">₱{intern.calculated_salary.toLocaleString()}</span>
                         <div className="text-xs text-slate-400 mt-1">
-                          (Excludes OT/WFH)
+                          (₱200 for 8+ hrs, ₱100 for 4-7.99 hrs/day)
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Excludes OT/WFH
                         </div>
                       </TableCell>
                       <TableCell>

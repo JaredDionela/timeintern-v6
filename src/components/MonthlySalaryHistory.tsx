@@ -160,9 +160,8 @@ const MonthlySalaryHistory = () => {
             <CardTitle className="text-white flex items-center gap-2">
               <DollarSign className="w-5 h-5" />
               Monthly Salary History
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Historical salary records for all interns
+            </CardTitle>            <CardDescription className="text-slate-400">
+              Historical salary records - Tiered: ₱200 for 8+ hrs, ₱100 for 4-7.99 hrs per day (Regular logs only, WFH/Overtime excluded)
             </CardDescription>
           </div>
           <Button 
