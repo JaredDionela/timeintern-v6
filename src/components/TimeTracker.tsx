@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatLocalTime } from "@/lib/dateUtils";
 import { Clock } from "lucide-react";
 
 interface TimeTrackerProps {
@@ -21,7 +22,16 @@ const TimeTracker = ({ signInTime, onTimeUpdate }: TimeTrackerProps) => {
       const now = new Date();
       setCurrentTime(now);
       
-      const signInDateTime = new Date(signInTime);
+      // Handle both ISO format and local format timestamps
+      let signInDateTime: Date;
+      if (signInTime.includes('T')) {
+        // ISO format
+        signInDateTime = new Date(signInTime);
+      } else {
+        // Local format "YYYY-MM-DD HH:MM:SS"
+        signInDateTime = new Date(signInTime.replace(' ', 'T'));
+      }
+      
       const elapsedMs = now.getTime() - signInDateTime.getTime();
       const totalHours = elapsedMs / (1000 * 60 * 60);
       
@@ -53,7 +63,7 @@ const TimeTracker = ({ signInTime, onTimeUpdate }: TimeTrackerProps) => {
           <div>
             <p className="text-slate-400 text-sm">Sign In Time</p>
             <p className="text-white font-semibold">
-              {new Date(signInTime).toLocaleTimeString()}
+              {formatLocalTime(signInTime)}
             </p>
           </div>
           <div>

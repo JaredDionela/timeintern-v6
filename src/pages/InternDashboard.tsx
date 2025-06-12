@@ -9,6 +9,19 @@ import QRScanner from "@/components/QRScanner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getLocalDateString, getCurrentMonth, getCurrentYear } from "@/lib/dateUtils";
 
+// Interface for the monthly log breakdown RPC function response
+interface MonthlyLogBreakdown {
+  total_hours: number;
+  regular_hours: number;
+  overtime_hours: number;
+  wfh_hours: number;
+  days_worked: number;
+  regular_days: number;
+  calculated_salary: number;
+  daily_rate: number;
+  salary_policy: string;
+}
+
 const InternDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -181,30 +194,47 @@ const InternDashboard = () => {
       const month = getCurrentMonth();
       const year = getCurrentYear();
 
-      const { data: monthlyRecord, error: monthlyError } = await supabase
-        .from('monthly_salary_history')
-        .select('total_hours, total_salary')
-        .eq('user_id', user.id)
-        .eq('month', month)
-        .eq('year', year)
-        .maybeSingle(); // Use maybeSingle as record might not exist
+      // Get monthly breakdown that shows correct salary calculation
+      const { data: breakdown, error: breakdownError } = await supabase
+        .rpc('get_monthly_log_breakdown', {
+          p_user_id: user.id,
+          p_month: month,
+          p_year: year
+        });
 
-      if (monthlyError && monthlyError.code !== 'PGRST116') throw monthlyError;
+      if (breakdownError) {
+        console.error('Error fetching breakdown:', breakdownError);
+        // Fallback to monthly_salary_history
+        const { data: monthlyRecord, error: monthlyError } = await supabase
+          .from('monthly_salary_history')
+          .select('total_hours, total_salary')
+          .eq('user_id', user.id)
+          .eq('month', month)
+          .eq('year', year)
+          .maybeSingle();
 
-      if (monthlyRecord) {
-        setHoursWorked(monthlyRecord.total_hours || 0); // Ensure fallback to 0 if null
-        setCurrentMonthSalary(monthlyRecord.total_salary || 0); // Ensure fallback to 0 if null
+        if (monthlyError && monthlyError.code !== 'PGRST116') throw monthlyError;
+
+        if (monthlyRecord) {
+          setHoursWorked(monthlyRecord.total_hours || 0);
+          setCurrentMonthSalary(monthlyRecord.total_salary || 0); // This should now be correct
+        } else {
+          setHoursWorked(0);
+          setCurrentMonthSalary(0);
+        }
       } else {
-        setHoursWorked(0);
-        setCurrentMonthSalary(0);
+        // Use the breakdown data which ensures correct salary calculation
+        const breakdownData = breakdown as unknown as MonthlyLogBreakdown;
+        setHoursWorked(breakdownData?.total_hours || 0);
+        setCurrentMonthSalary(breakdownData?.calculated_salary || 0); // This excludes WFH/Overtime
       }
 
     } catch (error) {
       console.error('Error fetching total hours:', error);
-      setHoursWorked(0); // Set defaults on error
+      setHoursWorked(0);
       setCurrentMonthSalary(0);
     } finally {
-      setLoading(false); // Set loading to false after all essential data is fetched or attempted
+      setLoading(false);
     }
   };
 
@@ -328,7 +358,7 @@ const InternDashboard = () => {
           <CardHeader>
             <CardTitle className="text-white">Monthly Earnings</CardTitle>
             <CardDescription className="text-slate-400">
-              Your estimated salary for the current month.
+              Fixed ₱200 per day worked, regardless of hours.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -336,7 +366,7 @@ const InternDashboard = () => {
               ₱{currentMonthSalary.toFixed(2)}
             </p>
             <p className="text-sm text-slate-500 mt-1">
-              Based on {hoursWorked.toFixed(2)} hours completed this month.
+              Based on {Math.round(currentMonthSalary / 200)} days worked this month ({hoursWorked.toFixed(2)} total hours).
             </p>
           </CardContent>
         </Card>

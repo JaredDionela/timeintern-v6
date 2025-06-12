@@ -107,6 +107,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          log_type: string | null
           time_in: string | null
           time_out: string | null
           total_hours: number | null
@@ -117,6 +118,7 @@ export type Database = {
           created_at?: string
           date: string
           id?: string
+          log_type?: string | null
           time_in?: string | null
           time_out?: string | null
           total_hours?: number | null
@@ -127,6 +129,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          log_type?: string | null
           time_in?: string | null
           time_out?: string | null
           total_hours?: number | null
@@ -140,12 +143,68 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_monthly_summary: {
+        Args: {
+          p_user_id: string
+          p_month: number
+          p_year: number
+        }
+        Returns: Json
+      }
+      cleanup_logs_by_intern: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      cleanup_logs_by_intern_batched: {
+        Args: {
+          p_user_id: string
+          p_batch_size?: number
+        }
+        Returns: Json
+      }
+      cleanup_logs_by_month: {
+        Args: {
+          p_month: number
+          p_year: number
+        }
+        Returns: Json
+      }
+      cleanup_logs_by_month_batched: {
+        Args: {
+          p_month: number
+          p_year: number
+          p_batch_size?: number
+        }
+        Returns: Json
+      }
       create_qr_code: {
         Args: {
           qr_data: string
           expiry_seconds?: number
         }
         Returns: Json // JSON type instead of object
+      }
+      delete_manual_log: {
+        Args: {
+          p_log_id: string
+        }
+        Returns: Json
+      }
+      delete_multiple_logs: {
+        Args: {
+          p_log_ids: string[]
+        }
+        Returns: Json
+      }
+      get_monthly_log_breakdown: {
+        Args: {
+          p_user_id: string
+          p_month: number
+          p_year: number
+        }
+        Returns: Json
       }
       validate_qr_code: {
         Args: {
@@ -158,6 +217,34 @@ export type Database = {
           qr_data: string
         }
         Returns: Json // JSON type instead of object
+      }
+      refresh_monthly_salary_history: {
+        Args: {
+          p_user_id: string
+          p_month: number
+          p_year: number
+        }
+        Returns: Json
+      }
+      recalculate_all_salary_history: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_detailed_daily_logs: {
+        Args: {
+          p_start_date: string
+          p_end_date: string
+        }
+        Returns: {
+          id: string
+          date: string
+          user_id: string
+          intern_name: string
+          time_in: string | null
+          time_out: string | null
+          total_hours: number | null
+          log_type: string | null
+        }[]
       }
     }
     Enums: {

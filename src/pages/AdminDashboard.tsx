@@ -15,6 +15,8 @@ import {
   LogOut,
   Menu,
   X,
+  Settings,
+  Database,
 } from "lucide-react";
 
 // Import dashboard components
@@ -24,6 +26,8 @@ import DailyLogs from "@/components/DailyLogs";
 import MonthlySummary from "@/components/MonthlySummary";
 import MonthlySalaryHistory from "@/components/MonthlySalaryHistory";
 import UserStatusLog from "@/components/UserStatusLog";
+import ManualLogManagement from "@/components/ManualLogManagement";
+import DataCleanupTools from "@/components/DataCleanupTools";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -99,6 +103,8 @@ const AdminDashboard = () => {
     { value: "monthly-summary", label: "Monthly Summary", icon: <CalendarDays className="w-4 h-4 mr-2" /> },
     { value: "salary-history", label: "Salary History", icon: <History className="w-4 h-4 mr-2" /> },
     { value: "user-status", label: "User Status", icon: <Users className="w-4 h-4 mr-2" /> },
+    { value: "manual-logs", label: "Manual Logs", icon: <Settings className="w-4 h-4 mr-2" /> },
+    { value: "data-cleanup", label: "Data Cleanup", icon: <Database className="w-4 h-4 mr-2" /> },
   ];
 
   return (
@@ -185,15 +191,15 @@ const AdminDashboard = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           {/* Desktop Navigation Tabs */}
           {!isMobile && (
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 bg-slate-800/50 border-slate-700 h-auto p-1 gap-1">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 bg-slate-800/50 border-slate-700 h-auto p-1 gap-1">
               {navItems.map((item) => (
                 <TabsTrigger
                   key={item.value}
                   value={item.value}
-                  className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                  className="flex-1 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs"
                 >
                   {item.icon}
-                  {item.label}
+                  <span className="hidden sm:inline">{item.label}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -221,6 +227,14 @@ const AdminDashboard = () => {
 
           <TabsContent value="user-status">
             <UserStatusLog />
+          </TabsContent>
+
+          <TabsContent value="manual-logs">
+            <ManualLogManagement />
+          </TabsContent>
+
+          <TabsContent value="data-cleanup">
+            <DataCleanupTools />
           </TabsContent>
         </Tabs>
       </main>

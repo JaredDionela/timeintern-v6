@@ -5,7 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import QrScanner from 'qr-scanner';
 import type { ScanResult as QrScannerScanResult } from 'qr-scanner';
-import { getLocalDateString } from "@/lib/dateUtils";
+import { getLocalDateString, createLocalTimestamp } from "@/lib/dateUtils";
 
 interface QRScannerProps {
   onClose: () => void;
@@ -221,12 +221,15 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             variant: "default" 
           });
           onClose();
-          return;
-        } else if (existingLog.time_in && !existingLog.time_out) {
+          return;        } else if (existingLog.time_in && !existingLog.time_out) {
           // Time out
+          const now = new Date();
+          const timeOutStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+          const timeOutTimestamp = createLocalTimestamp(today, timeOutStr);
+          
           const { error: updateError } = await supabase
             .from('time_logs')
-            .update({ time_out: new Date().toISOString() })
+            .update({ time_out: timeOutTimestamp })
             .eq('id', existingLog.id);
 
           if (updateError) {
@@ -243,15 +246,18 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             });
             onClose();
           }
-        }
-      } else {
+        }      } else {
         // Time in
+        const now = new Date();
+        const timeInStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const timeInTimestamp = createLocalTimestamp(today, timeInStr);
+        
         const { error: insertError } = await supabase
           .from('time_logs')
           .insert({ 
             user_id: user.id, 
             date: today, 
-            time_in: new Date().toISOString() 
+            time_in: timeInTimestamp
           });
 
         if (insertError) {

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Clock, ArrowRight, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
-import { getLocalDateString } from "@/lib/dateUtils";
+import { getLocalDateString, formatLocalTime } from "@/lib/dateUtils";
 
 interface ActivityLog {
   id: string;
@@ -69,13 +69,12 @@ const RecentActivity = () => {
       
       (timeLogsData || []).forEach(log => {
         const internName = profilesMap[log.user_id] || 'Unknown Intern';
-        
-        if (log.time_in) {
+          if (log.time_in) {
           activityLogs.push({
             id: `${log.id}-in`,
             intern_name: internName,
             action: 'Time In',
-            time: new Date(log.time_in).toLocaleTimeString(),
+            time: formatLocalTime(log.time_in),
             date: log.date
           });
         }
@@ -85,7 +84,7 @@ const RecentActivity = () => {
             id: `${log.id}-out`,
             intern_name: internName,
             action: 'Time Out',
-            time: new Date(log.time_out).toLocaleTimeString(),
+            time: formatLocalTime(log.time_out),
             date: log.date
           });
         }
