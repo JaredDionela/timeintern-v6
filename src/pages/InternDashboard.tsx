@@ -183,7 +183,7 @@ const InternDashboard = () => {
         console.log('InternDashboard fetchTodayStatus Debug:', {
           activeLog,
           time_in: activeLog.time_in,
-          formatted: formatLocalTime(activeLog.time_in)
+          formatted: activeLog.time_in != null ? formatLocalTime(activeLog.time_in) : 'N/A'
         });
       } else {
         // No active session, user is signed out
