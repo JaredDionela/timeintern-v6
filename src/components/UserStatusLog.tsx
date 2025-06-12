@@ -482,7 +482,7 @@ const UserStatusLog = () => {
   return (
     <div className="space-y-6">
       {/* Dashboard Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 justify-center">
         <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -514,18 +514,6 @@ const UserStatusLog = () => {
               <div>
                 <p className="text-sm text-slate-400">Completed</p>
                 <p className="text-2xl font-bold text-white">{stats.completedInterns}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-purple-500" />
-              <div>
-                <p className="text-sm text-slate-400">Total Hours</p>
-                <p className="text-2xl font-bold text-white">{stats.totalHours.toFixed(1)}</p>
               </div>
             </div>
           </CardContent>
@@ -719,12 +707,7 @@ const UserStatusLog = () => {
                       </TableCell>
                       <TableCell>
                         <span className="text-green-400 font-bold">₱{intern.calculated_salary.toLocaleString()}</span>
-                        <div className="text-xs text-slate-400 mt-1">
-                          (₱200 for 8+ hrs, ₱100 for 4-7.99 hrs/day)
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          Excludes OT/WFH
-                        </div>
+                     
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

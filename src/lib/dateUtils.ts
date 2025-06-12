@@ -54,20 +54,26 @@ export const extractLocalTime = (timestamp: string): string => {
 
 // Format timestamp for display in local timezone
 export const formatLocalTime = (timestamp: string): string => {
+  console.log('formatLocalTime Debug Input:', timestamp);
+  
   // Handle both ISO format and our local format
   if (timestamp.includes('T')) {
     // ISO format - extract time components directly without timezone conversion
     const isoTime = timestamp.split('T')[1];
     if (isoTime) {
       const timeOnly = isoTime.split('.')[0]; // Remove milliseconds if present
-      return timeOnly.substring(0, 5); // HH:MM
+      const result = timeOnly.substring(0, 5); // HH:MM
+      console.log('formatLocalTime Debug ISO Output:', result);
+      return result;
     }
     return '';
   } else {
     // Our local format - extract time part directly
     const timePart = timestamp.split(' ')[1];
     if (timePart) {
-      return timePart.substring(0, 5); // HH:MM
+      const result = timePart.substring(0, 5); // HH:MM
+      console.log('formatLocalTime Debug Local Output:', result);
+      return result;
     }
     return '';
   }

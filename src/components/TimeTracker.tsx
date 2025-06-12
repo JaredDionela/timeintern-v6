@@ -28,8 +28,12 @@ const TimeTracker = ({ signInTime, onTimeUpdate }: TimeTrackerProps) => {
         // ISO format
         signInDateTime = new Date(signInTime);
       } else {
-        // Local format "YYYY-MM-DD HH:MM:SS"
-        signInDateTime = new Date(signInTime.replace(' ', 'T'));
+        // Local format "YYYY-MM-DD HH:MM:SS" - parse as local time
+        // Split the timestamp and create date in local timezone
+        const [datePart, timePart] = signInTime.split(' ');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes, seconds = 0] = timePart.split(':').map(Number);
+        signInDateTime = new Date(year, month - 1, day, hours, minutes, seconds);
       }
       
       const elapsedMs = now.getTime() - signInDateTime.getTime();

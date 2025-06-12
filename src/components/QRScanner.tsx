@@ -221,11 +221,19 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             variant: "default" 
           });
           onClose();
-          return;        } else if (existingLog.time_in && !existingLog.time_out) {
-          // Time out
+          return;        } else if (existingLog.time_in && !existingLog.time_out) {          // Time out
           const now = new Date();
           const timeOutStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
           const timeOutTimestamp = createLocalTimestamp(today, timeOutStr);
+          
+          console.log('QR Scanner Time Out Debug:', {
+            now: now.toString(),
+            hours: now.getHours(),
+            minutes: now.getMinutes(),
+            timeOutStr,
+            timeOutTimestamp,
+            today
+          });
           
           const { error: updateError } = await supabase
             .from('time_logs')
@@ -246,11 +254,19 @@ const QRScannerComponent = ({ onClose }: QRScannerProps) => {
             });
             onClose();
           }
-        }      } else {
-        // Time in
+        }      } else {        // Time in
         const now = new Date();
         const timeInStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         const timeInTimestamp = createLocalTimestamp(today, timeInStr);
+        
+        console.log('QR Scanner Time In Debug:', {
+          now: now.toString(),
+          hours: now.getHours(),
+          minutes: now.getMinutes(),
+          timeInStr,
+          timeInTimestamp,
+          today
+        });
         
         const { error: insertError } = await supabase
           .from('time_logs')

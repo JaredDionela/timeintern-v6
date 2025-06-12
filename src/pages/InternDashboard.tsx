@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { LogOut, QrCode } from "lucide-react";
 import QRScanner from "@/components/QRScanner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getLocalDateString, getCurrentMonth, getCurrentYear } from "@/lib/dateUtils";
+import { getLocalDateString, getCurrentMonth, getCurrentYear, formatLocalTime } from "@/lib/dateUtils";
 
 // Interface for the monthly log breakdown RPC function response
 interface MonthlyLogBreakdown {
@@ -159,23 +159,34 @@ const InternDashboard = () => {
       }
 
       const today = getLocalDateString();
-      const { data: timeLog, error } = await supabase
+      
+      // First, check if there's an active session (time_in without time_out)
+      const { data: activeLog, error: activeError } = await supabase
         .from('time_logs')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
+        .not('time_in', 'is', null)
+        .is('time_out', null)
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle(); // Use maybeSingle to handle no logs for today
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
+      if (activeError && activeError.code !== 'PGRST116') {
+        throw activeError;
       }
 
-      if (timeLog) {
-        setIsSignedIn(!!timeLog.time_in && !timeLog.time_out);
-        setSignInTime(timeLog.time_in);
+      if (activeLog) {
+        // User is currently signed in
+        setIsSignedIn(true);
+        setSignInTime(activeLog.time_in);
+        console.log('InternDashboard fetchTodayStatus Debug:', {
+          activeLog,
+          time_in: activeLog.time_in,
+          formatted: formatLocalTime(activeLog.time_in)
+        });
       } else {
+        // No active session, user is signed out
         setIsSignedIn(false);
         setSignInTime(null);
       }
@@ -324,7 +335,7 @@ const InternDashboard = () => {
                     </div>
                     {signInTime && (
                       <p className="text-xs text-slate-400">
-                        Signed in at {new Date(signInTime).toLocaleTimeString()}
+                        Signed in at {formatLocalTime(signInTime)}
                       </p>
                     )}
                   </div>
