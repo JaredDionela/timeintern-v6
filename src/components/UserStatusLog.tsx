@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Search, Filter, Download, Users, Clock, TrendingUp, AlertCircle } from "lucide-react";
+import { Search, Filter, Download, Users, Clock, TrendingUp, AlertCircle, FileText, Calendar, DollarSign } from "lucide-react";
 import { getLocalDateString } from "@/lib/dateUtils";
 
 interface InternStatus {
@@ -26,6 +26,14 @@ interface InternStatus {
   status: string;
   is_online: boolean;
   last_activity?: string | null;
+}
+
+interface DailyLog {
+  date: string;
+  time_in: string | null;
+  time_out: string | null;
+  total_hours: number;
+  log_type: string | null;
 }
 
 interface LogBreakdown {
@@ -52,6 +60,8 @@ const UserStatusLog = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [onlineFilter, setOnlineFilter] = useState("all");
+  const [selectedIntern, setSelectedIntern] = useState<string>("all");
+  const [exportLoading, setExportLoading] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalInterns: 0,
     onlineInterns: 0,
@@ -230,7 +240,7 @@ const UserStatusLog = () => {
     const csvHeaders = [
       'Name', 'Email', 'Online Status', 'Progress Status', 
       'Regular Hours', 'Overtime Hours', 'WFH Hours', 'Total Hours', 
-      'Required Hours', 'Salary (Tiered: ₱200/8+ hrs, ₱100/4-7.99 hrs)', 'Last Activity'
+      'Required Hours', 'Salary (Regular Only)', 'Last Activity'
     ];
     
     const csvData = filteredInterns.map(intern => [
@@ -262,6 +272,146 @@ const UserStatusLog = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    }
+  };
+
+  const exportInternComprehensiveData = async (internId: string) => {
+    if (internId === "all") {
+      toast({
+        title: "Please Select an Intern",
+        description: "Please select a specific intern to export their comprehensive data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setExportLoading(true);
+    
+    try {
+      const selectedInternData = interns.find(intern => intern.id === internId);
+      if (!selectedInternData) throw new Error("Intern not found");
+
+      // Get intern's user_id from intern_profiles
+      const { data: profile, error: profileError } = await supabase
+        .from('intern_profiles')
+        .select('user_id, name, email, required_hours')
+        .eq('id', internId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Get all daily logs for the intern
+      const { data: dailyLogs, error: logsError } = await supabase
+        .from('time_logs')
+        .select('date, time_in, time_out, total_hours, log_type')
+        .eq('user_id', profile.user_id)
+        .order('date', { ascending: false });
+
+      if (logsError) throw logsError;
+
+      // Get monthly breakdown for current year
+      const currentYear = new Date().getFullYear();
+      const monthlyBreakdowns = [];
+      
+      for (let month = 1; month <= 12; month++) {
+        const { data: breakdown } = await supabase
+          .rpc('get_monthly_log_breakdown', {
+            p_user_id: profile.user_id,
+            p_month: month,
+            p_year: currentYear
+          });
+
+        if (breakdown) {
+          const breakdownData = breakdown as unknown as LogBreakdown;
+          monthlyBreakdowns.push({
+            month: month,
+            year: currentYear,
+            ...breakdownData
+          });
+        }
+      }
+
+      // Create comprehensive CSV content
+      const csvSections = [];
+
+      // 1. Intern Information
+      csvSections.push("=== INTERN INFORMATION ===");
+      csvSections.push(`Name,${profile.name}`);
+      csvSections.push(`Email,${profile.email}`);
+      csvSections.push(`Required Hours,${profile.required_hours}`);
+      csvSections.push(`Current Status,${selectedInternData.status}`);
+      csvSections.push(`Online Status,${selectedInternData.is_online ? 'Online' : 'Offline'}`);
+      csvSections.push(`Last Activity,${selectedInternData.last_activity ? new Date(selectedInternData.last_activity).toLocaleString() : 'N/A'}`);
+      csvSections.push("");
+
+      // 2. Current Month Summary
+      const currentMonth = new Date().getMonth() + 1;
+      const currentMonthData = monthlyBreakdowns.find(m => m.month === currentMonth);
+      csvSections.push("=== CURRENT MONTHLY SUMMARY ===");
+      csvSections.push(`Month,${new Date(currentYear, currentMonth - 1).toLocaleString('default', { month: 'long' })} ${currentYear}`);
+      csvSections.push(`Total Hours,${currentMonthData?.total_hours?.toFixed(2) || '0.00'}`);
+      csvSections.push(`Regular Hours,${currentMonthData?.regular_hours?.toFixed(2) || '0.00'}`);
+      csvSections.push(`Overtime Hours,${currentMonthData?.overtime_hours?.toFixed(2) || '0.00'}`);
+      csvSections.push(`WFH Hours,${currentMonthData?.wfh_hours?.toFixed(2) || '0.00'}`);
+      csvSections.push(`Days Worked,${currentMonthData?.days_worked || 0}`);
+      csvSections.push(`Regular Days,${currentMonthData?.regular_days || 0}`);
+      csvSections.push(`Calculated Salary,₱${currentMonthData?.calculated_salary?.toLocaleString() || '0'}`);
+      csvSections.push("");
+
+      // 3. All Monthly Summaries
+      csvSections.push("=== ALL MONTHLY SUMMARIES (Current Year) ===");
+      csvSections.push("Month,Total Hours,Regular Hours,Overtime Hours,WFH Hours,Days Worked,Regular Days,Calculated Salary");
+      monthlyBreakdowns.forEach(breakdown => {
+        const monthName = new Date(breakdown.year, breakdown.month - 1).toLocaleString('default', { month: 'long' });
+        csvSections.push(`${monthName} ${breakdown.year},${breakdown.total_hours?.toFixed(2) || '0.00'},${breakdown.regular_hours?.toFixed(2) || '0.00'},${breakdown.overtime_hours?.toFixed(2) || '0.00'},${breakdown.wfh_hours?.toFixed(2) || '0.00'},${breakdown.days_worked || 0},${breakdown.regular_days || 0},₱${breakdown.calculated_salary?.toLocaleString() || '0'}`);
+      });
+      csvSections.push("");
+
+      // 4. All Daily Logs
+      csvSections.push("=== ALL DAILY LOGS ===");
+      csvSections.push("Date,Time In,Time Out,Total Hours,Log Type");
+      (dailyLogs || []).forEach(log => {
+        csvSections.push(`${log.date},${log.time_in || 'N/A'},${log.time_out || 'N/A'},${log.total_hours?.toFixed(2) || '0.00'},${log.log_type || 'Regular'}`);
+      });
+      csvSections.push("");
+
+      // 5. Salary Policy Information
+      csvSections.push("=== SALARY POLICY ===");
+      csvSections.push("Policy,Tiered salary structure");
+      csvSections.push("8+ hours per day,₱200");
+      csvSections.push("4-7.99 hours per day,₱100");
+      csvSections.push("Less than 4 hours per day,₱0");
+      csvSections.push("Break Policy,1 hour deducted for regular and WFH shifts > 4 hours");
+      csvSections.push("Salary Contributors,Only regular hours contribute to salary");
+      csvSections.push("Excluded from Salary,Overtime and WFH hours are tracked but excluded from salary calculation");
+
+      const csvContent = csvSections.join('\n');
+
+      // Download CSV
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${profile.name.replace(/\s+/g, '_')}_comprehensive_report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export Successful",
+        description: `Comprehensive report for ${profile.name} exported successfully`,
+      });
+
+    } catch (error) {
+      console.error('Error exporting comprehensive data:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export comprehensive data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -398,12 +548,59 @@ const UserStatusLog = () => {
                 className="text-slate-300 border-slate-600 hover:bg-slate-700"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export CSV
+                Export All CSV
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
+          {/* Intern Selection and Comprehensive Export */}
+          <div className="mb-6 p-4 bg-slate-700/20 rounded-lg border border-slate-600">
+            <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Individual Intern Report
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <Select value={selectedIntern} onValueChange={setSelectedIntern}>
+                  <SelectTrigger className="w-full bg-slate-700/50 border-slate-600 text-white">
+                    <SelectValue placeholder="Select an intern for comprehensive report" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Select an intern...</SelectItem>
+                    {interns.map((intern) => (
+                      <SelectItem key={intern.id} value={intern.id}>
+                        {intern.name} ({intern.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={() => exportInternComprehensiveData(selectedIntern)}
+                disabled={selectedIntern === "all" || exportLoading}
+                variant="default"
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+              >
+                {exportLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export Full Report
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Exports comprehensive data including daily logs, monthly summaries, salary calculations, and status information.
+            </p>
+          </div>
+
           {/* Search and Filters */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="relative flex-1">
