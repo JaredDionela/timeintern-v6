@@ -116,12 +116,12 @@ const AdminDashboard = () => {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             
-            <Avatar className="h-10 w-10 border-2 border-blue-500">
-              <AvatarImage src={adminAvatar} alt={adminName} />
-              <AvatarFallback className="bg-blue-600 text-white">
-                {adminName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <img 
+              src="/app-logo.png" 
+              alt="TimeIntern Logo" 
+              className="h-20 w-20 object-contain"
+            />
+            
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-white">Admin Dashboard</h1>
               <p className="text-slate-400 text-sm">Welcome, {adminName}.</p>

@@ -313,17 +313,7 @@ const Index = () => {
             </TabsContent>
           </Tabs>
           
-          {/* Emergency clear button for debugging */}
-          <div className="mt-4 text-center">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleClearAuth}
-              className="text-xs text-slate-500 hover:text-slate-400"
-            >
-              Clear Auth Data (Debug)
-            </Button>
-          </div>
+
         </CardContent>
       </Card>
     </div>
