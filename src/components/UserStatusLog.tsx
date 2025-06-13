@@ -377,11 +377,10 @@ const UserStatusLog = () => {
 
       // 5. Salary Policy Information
       csvSections.push("=== SALARY POLICY ===");
-      csvSections.push("Policy,Tiered salary structure");
-      csvSections.push("8+ hours per day,₱200");
-      csvSections.push("4-7.99 hours per day,₱100");
-      csvSections.push("Less than 4 hours per day,₱0");
-      csvSections.push("Break Policy,1 hour deducted for regular and WFH shifts > 4 hours");
+      csvSections.push("Policy,Updated hourly rate structure");
+      csvSections.push("Regular hours up to 8 hours per day,₱25/hour");
+      csvSections.push("Hours over 8 per day,Unpaid");
+      csvSections.push("Break Policy,1 hour deducted for regular and WFH shifts >= 5 hours");
       csvSections.push("Salary Contributors,Only regular hours contribute to salary");
       csvSections.push("Excluded from Salary,Overtime and WFH hours are tracked but excluded from salary calculation");
 
@@ -416,9 +415,9 @@ const UserStatusLog = () => {
   };
 
   const calculateSalary = (daysWorked: number) => {
-    // TIERED DAILY SALARY STRUCTURE:
+    // UPDATED HOURLY SALARY STRUCTURE:
     // This is for display purposes only - actual calculation is done in the database
-    // ₱200 for 8+ hours per day, ₱100 for 4-7.99 hours per day
+    // ₱25/hour for regular hours up to 8 hours per day, unpaid for hours over 8
     const dailyRate = 200; // Maximum daily rate for reference
     return daysWorked * dailyRate;
   };

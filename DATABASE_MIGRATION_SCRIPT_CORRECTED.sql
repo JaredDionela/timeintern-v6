@@ -170,10 +170,8 @@ BEGIN
         AND EXTRACT(YEAR FROM tl.date) = p_year
         AND tl.time_in IS NOT NULL
         AND tl.time_out IS NOT NULL
-        AND (tl.log_type IS NULL OR tl.log_type = 'regular');
-
-    -- FIXED: Calculate salary based on ONLY regular hours with tiered structure
-    -- ₱200 for 8+ hours per day, ₱100 for 4-7.99 hours per day
+        AND (tl.log_type IS NULL OR tl.log_type = 'regular');    -- UPDATED: Calculate salary based on ONLY regular hours with new ₱25/hour structure
+    -- ₱25/hour for regular hours under 8 hours per day, unpaid for hours over 8
     -- ONLY regular log types contribute to salary (excludes overtime AND WFH)
     WITH daily_regular_hours AS (
         SELECT 
@@ -193,9 +191,8 @@ BEGIN
             date,
             day_hours,
             CASE 
-                WHEN day_hours >= 8 THEN 200  -- ₱200 for 8+ hours
-                WHEN day_hours >= 4 THEN 100  -- ₱100 for 4-7.99 hours
-                ELSE 0                        -- ₱0 for < 4 hours
+                WHEN day_hours <= 8 THEN day_hours * 25  -- ₱25/hour for hours up to 8
+                ELSE 8 * 25                              -- Cap at 8 hours * ₱25 = ₱200
             END as daily_salary
         FROM daily_regular_hours
     )
@@ -211,7 +208,7 @@ BEGIN
         'regular_days', regular_days,
         'calculated_salary', calculated_salary,
         'daily_rate', 200,
-        'salary_policy', 'CORRECTED: Break deduction for shifts >=5 hours | Tiered: ₱200 for 8+ hours, ₱100 for 4-7.99 hours per day (ONLY regular logs, excludes overtime AND WFH)'
+        'salary_policy', 'UPDATED: Break deduction for shifts >=5 hours | New rate: ₱25/hour for regular hours up to 8 hours per day, unpaid over 8 hours (ONLY regular logs, excludes overtime AND WFH)'
     );
 
     RETURN result;

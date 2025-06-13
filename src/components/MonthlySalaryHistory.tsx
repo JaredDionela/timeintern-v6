@@ -161,7 +161,7 @@ const MonthlySalaryHistory = () => {
               <DollarSign className="w-5 h-5" />
               Monthly Salary History
             </CardTitle>            <CardDescription className="text-slate-400">
-              Historical salary records - Tiered: ₱200 for 8+ hrs, ₱100 for 4-7.99 hrs per day (Regular logs only, WFH/Overtime excluded)
+              Historical salary records - New rate: ₱25/hour for regular hours up to 8 hours per day, unpaid over 8 hours (Regular logs only, WFH/Overtime excluded)
             </CardDescription>
           </div>
           <Button 
