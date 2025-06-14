@@ -668,7 +668,7 @@ ORDER BY year DESC, month DESC, log_type;
             SQL Query Reference
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Manual SQL queries for advanced data management
+            Manual SQL queries for advanced data management (Just in case you need them)
           </CardDescription>
         </CardHeader>
         
@@ -752,8 +752,8 @@ ORDER BY year DESC, month DESC, log_type;
           </div>
           
           <div className="text-sm text-slate-400 p-4 bg-blue-900/20 rounded border-l-4 border-blue-500">
-            <strong>Note:</strong> These SQL queries should be executed directly in your Supabase SQL editor or database management tool. 
-            The cleanup functions above provide a safer UI-based approach for common operations.
+            <strong>Note:</strong> These SQL queries should be executed directly in Supabase SQL editor or database management tool. 
+            The cleanup functions above provide a safer approach for common operations.
           </div>
         </CardContent>
       </Card>

@@ -117,14 +117,14 @@ const AdminDashboard = () => {
           <div className="flex items-center gap-3">
             
             <img 
-              src="/app-logo.png" 
+              src="/arvie.png" 
               alt="TimeIntern Logo" 
               className="h-20 w-20 object-contain"
             />
             
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white">Admin Dashboard</h1>
-              <p className="text-slate-400 text-sm">Welcome, {adminName}.</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">Arvie Dashboard</h1>
+              <p className="text-slate-400 text-sm">Welcome, Arvie!</p>
             </div>
           </div>
           

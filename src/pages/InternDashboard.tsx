@@ -285,7 +285,7 @@ const InternDashboard = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-white">
                 Hi, {internName || 'Intern'}!
               </h1>
-              <p className="text-slate-400">Welcome to Ariva!</p>
+              <p className="text-slate-400">Welcome to Ariva Academy!</p>
             </div>
           </div>
           <Button 
@@ -335,7 +335,7 @@ const InternDashboard = () => {
                     </div>
                     {signInTime && (
                       <p className="text-xs text-slate-400">
-                        Signed in at {formatLocalTime(signInTime)}
+                        Timed in at {formatLocalTime(signInTime)}
                       </p>
                     )}
                   </div>
@@ -368,7 +368,6 @@ const InternDashboard = () => {
         <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-white">Monthly Earnings</CardTitle>
-
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-green-400">

@@ -128,7 +128,7 @@ const RecentActivity = () => {
           Recent Activity
         </CardTitle>
         <CardDescription className="text-slate-400">
-          Today's check-ins and check-outs (resets daily)
+          Today's Logs (resets daily)
         </CardDescription>
       </CardHeader>
       <CardContent>

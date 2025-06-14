@@ -4,7 +4,7 @@
 
 This update implements the new salary calculation logic requested:
 
-### New Salary Structure:
+### Salary Structure:
 - **₱25/hour** for regular hours up to 8 hours per day
 - **Unpaid** for hours over 8 hours per day
 - Examples:
@@ -17,7 +17,7 @@ This update implements the new salary calculation logic requested:
 - ₱100 for 4-7.99 hours per day
 - ₱0 for < 4 hours per day
 
-### What Remains Unchanged:
+### Rules:
 - **Break Policy**: 1-hour break automatically deducted for regular and WFH shifts ≥ 5 hours
 - **Salary Contributors**: Only regular hours contribute to salary
 - **Excluded from Salary**: Overtime and WFH hours are tracked but excluded from salary calculation
@@ -66,7 +66,7 @@ END as daily_salary
 
 3. **Frontend is ready** - All components reflect the new policy
 
-## Examples of New Salary Calculation
+## Examples of Salary Calculation
 
 | Daily Hours | Calculation | Daily Salary |
 |-------------|-------------|--------------|

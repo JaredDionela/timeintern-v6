@@ -166,7 +166,7 @@ const DailyLogs = () => {
               Daily Logs
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Time logs for {selectedDate} ({filteredLogs.length} entries)
+              ({filteredLogs.length} entries)
             </CardDescription>
           </div>
           <Button 

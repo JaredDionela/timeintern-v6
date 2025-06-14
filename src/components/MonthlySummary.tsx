@@ -140,7 +140,7 @@ const MonthlySummary = () => {
               Monthly Summary
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Daily attendance logs for selected month
+              
             </CardDescription>
           </div>
           <Button 

@@ -160,8 +160,9 @@ const MonthlySalaryHistory = () => {
             <CardTitle className="text-white flex items-center gap-2">
               <DollarSign className="w-5 h-5" />
               Monthly Salary History
-            </CardTitle>            <CardDescription className="text-slate-400">
-              Historical salary records - New rate: ₱25/hour for regular hours up to 8 hours per day, unpaid over 8 hours (Regular logs only, WFH/Overtime excluded)
+            </CardTitle>            
+            <CardDescription className="text-slate-400">
+              
             </CardDescription>
           </div>
           <Button 

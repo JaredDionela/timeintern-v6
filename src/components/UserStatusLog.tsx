@@ -279,7 +279,7 @@ const UserStatusLog = () => {
     if (internId === "all") {
       toast({
         title: "Please Select an Intern",
-        description: "Please select a specific intern to export their comprehensive data.",
+        description: "Please select a specific intern to export their data.",
         variant: "destructive",
       });
       return;
@@ -340,8 +340,6 @@ const UserStatusLog = () => {
       csvSections.push(`Email,${profile.email}`);
       csvSections.push(`Required Hours,${profile.required_hours}`);
       csvSections.push(`Current Status,${selectedInternData.status}`);
-      csvSections.push(`Online Status,${selectedInternData.is_online ? 'Online' : 'Offline'}`);
-      csvSections.push(`Last Activity,${selectedInternData.last_activity ? new Date(selectedInternData.last_activity).toLocaleString() : 'N/A'}`);
       csvSections.push("");
 
       // 2. Current Month Summary
@@ -355,7 +353,7 @@ const UserStatusLog = () => {
       csvSections.push(`WFH Hours,${currentMonthData?.wfh_hours?.toFixed(2) || '0.00'}`);
       csvSections.push(`Days Worked,${currentMonthData?.days_worked || 0}`);
       csvSections.push(`Regular Days,${currentMonthData?.regular_days || 0}`);
-      csvSections.push(`Calculated Salary,₱${currentMonthData?.calculated_salary?.toLocaleString() || '0'}`);
+      csvSections.push(`Calculated Salary,₱${currentMonthData?.calculated_salary?.toFixed(2) || '0.00'}`);
       csvSections.push("");
 
       // 3. All Monthly Summaries
@@ -363,7 +361,7 @@ const UserStatusLog = () => {
       csvSections.push("Month,Total Hours,Regular Hours,Overtime Hours,WFH Hours,Days Worked,Regular Days,Calculated Salary");
       monthlyBreakdowns.forEach(breakdown => {
         const monthName = new Date(breakdown.year, breakdown.month - 1).toLocaleString('default', { month: 'long' });
-        csvSections.push(`${monthName} ${breakdown.year},${breakdown.total_hours?.toFixed(2) || '0.00'},${breakdown.regular_hours?.toFixed(2) || '0.00'},${breakdown.overtime_hours?.toFixed(2) || '0.00'},${breakdown.wfh_hours?.toFixed(2) || '0.00'},${breakdown.days_worked || 0},${breakdown.regular_days || 0},₱${breakdown.calculated_salary?.toLocaleString() || '0'}`);
+        csvSections.push(`${monthName} ${breakdown.year},${breakdown.total_hours?.toFixed(2) || '0.00'},${breakdown.regular_hours?.toFixed(2) || '0.00'},${breakdown.overtime_hours?.toFixed(2) || '0.00'},${breakdown.wfh_hours?.toFixed(2) || '0.00'},${breakdown.days_worked || 0},${breakdown.regular_days || 0},₱${breakdown.calculated_salary?.toLocaleString() || '0.00'}`);
       });
       csvSections.push("");
 
@@ -375,15 +373,6 @@ const UserStatusLog = () => {
       });
       csvSections.push("");
 
-      // 5. Salary Policy Information
-      csvSections.push("=== SALARY POLICY ===");
-      csvSections.push("Policy,Updated hourly rate structure");
-      csvSections.push("Regular hours up to 8 hours per day,₱25/hour");
-      csvSections.push("Hours over 8 per day,Unpaid");
-      csvSections.push("Break Policy,1 hour deducted for regular and WFH shifts >= 5 hours");
-      csvSections.push("Salary Contributors,Only regular hours contribute to salary");
-      csvSections.push("Excluded from Salary,Overtime and WFH hours are tracked but excluded from salary calculation");
-
       const csvContent = csvSections.join('\n');
 
       // Download CSV
@@ -391,7 +380,7 @@ const UserStatusLog = () => {
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', `${profile.name.replace(/\s+/g, '_')}_comprehensive_report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `${profile.name.replace(/\s+/g, '_')}_ARIVA_report_${new Date().toISOString().split('T')[0]}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();

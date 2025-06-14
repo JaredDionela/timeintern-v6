@@ -314,7 +314,7 @@ const ManualLogManagement = () => {
                 Manual Log Management
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Add, edit, and manage time logs manually ({filteredLogs.length} entries for {selectedDate})
+                ({filteredLogs.length} entries)
               </CardDescription>
             </div>
             <div className="flex gap-2">
