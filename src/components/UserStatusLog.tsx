@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { supabaseAdmin } from "@/integrations/supabase/admin";
 import { useToast } from "@/components/ui/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,8 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Search, Filter, Download, Users, Clock, TrendingUp, AlertCircle, FileText, Calendar, DollarSign } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Search, Filter, Download, Users, Clock, TrendingUp, AlertCircle, FileText, Calendar, DollarSign, RefreshCw, Key, Eye, EyeOff } from "lucide-react";
 import { getLocalDateString } from "@/lib/dateUtils";
 
 interface InternStatus {
@@ -62,12 +65,18 @@ const UserStatusLog = () => {
   const [onlineFilter, setOnlineFilter] = useState("all");
   const [selectedIntern, setSelectedIntern] = useState<string>("all");
   const [exportLoading, setExportLoading] = useState(false);
+  const [passwordResetLoading, setPasswordResetLoading] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [selectedInternForReset, setSelectedInternForReset] = useState<InternStatus | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     totalInterns: 0,
     onlineInterns: 0,
     completedInterns: 0,
     totalHours: 0
   });
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
   // Set up real-time subscription
@@ -450,6 +459,206 @@ const UserStatusLog = () => {
     }
   };
 
+  // Password reset handler
+  const handlePasswordReset = async () => {
+    if (!selectedInternForReset) return;
+
+    setPasswordResetLoading(true);
+
+    try {
+      // Get the intern's profile
+      const { data: profile, error: profileError } = await supabase
+        .from('intern_profiles')
+        .select('user_id, email')
+        .eq('id', selectedInternForReset.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Update the password in auth and log the user in
+      const { error: authError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (authError) throw authError;
+
+      toast({
+        title: "Success",
+        description: "Password has been reset successfully.",
+      });
+
+      // Close the dialog
+      setResetDialogOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
+
+      // Optionally, you can log the user out or navigate them
+      // await supabase.auth.signOut();
+      // window.location.href = '/login';
+
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reset password. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setPasswordResetLoading(false);
+    }
+  };
+
+  // Direct Password Change Function
+  const directPasswordChange = async () => {
+    if (!selectedInternForReset) return;
+
+    // Validate password input
+    if (!newPassword || newPassword.length < 6) {
+      toast({
+        title: "Invalid Password",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPasswordResetLoading(true);
+
+    try {
+      // Verify admin access first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email?.includes('admin')) {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      // Get intern's user_id from intern_profiles
+      const { data: profile, error: profileError } = await supabase
+        .from('intern_profiles')
+        .select('user_id, name, email')
+        .eq('id', selectedInternForReset.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Call the admin password reset function
+      const { data: resetResult, error: resetError } = await supabaseAdmin
+        .rpc('admin_reset_intern_password', {
+          admin_user_id: user.id,
+          new_password: newPassword,
+          intern_user_id: profile.user_id
+        });
+
+      if (resetError) throw resetError;
+
+      // Type the result properly since it returns Json
+      const result = resetResult as { success?: boolean; error?: string } | null;
+
+      if (result?.success) {
+        // Since we can't directly update password via RPC, we'll use auth.admin.updateUserById
+        // This requires the service key to be properly configured
+        try {
+          // Attempt to use admin API if available
+          const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+            profile.user_id,
+            { password: newPassword }
+          );
+
+          if (updateError) {
+            // Fallback: Send password reset email
+            const { error: emailError } = await supabase.auth.resetPasswordForEmail(
+              profile.email,
+              {
+                redirectTo: `${window.location.origin}/reset-password?type=recovery&temp_password=${encodeURIComponent(newPassword)}`
+              }
+            );
+
+            if (emailError) throw emailError;
+
+            toast({
+              title: "Password Reset Email Sent",
+              description: `Since direct password update is not available, a reset email has been sent to ${profile.name}. Please share the temporary password: ${newPassword}`,
+              duration: 10000,
+            });
+          } else {
+            toast({
+              title: "Password Updated Successfully",
+              description: `Password for ${profile.name} has been changed directly`,
+            });
+          }
+        } catch (adminError) {
+          console.warn('Admin API not available, falling back to email reset:', adminError);
+          
+          // Fallback: Send reset email with instructions
+          const { error: emailError } = await supabase.auth.resetPasswordForEmail(
+            profile.email,
+            {
+              redirectTo: `${window.location.origin}/reset-password?type=recovery`
+            }
+          );
+
+          if (emailError) throw emailError;
+
+          toast({
+            title: "Password Reset Process Initiated",
+            description: `Admin API unavailable. Reset email sent to ${profile.name}. Please instruct them to use password: ${newPassword}`,
+            duration: 10000,
+          });
+        }
+      } else {
+        throw new Error(result?.error || 'Password reset authorization failed');
+      }
+
+      // Clear form and close dialog
+      setNewPassword("");
+      setConfirmPassword("");
+      setResetDialogOpen(false);
+      setSelectedInternForReset(null);
+
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      toast({
+        title: "Password Reset Failed",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      });
+    } finally {
+      setPasswordResetLoading(false);
+    }
+  };
+
+  const openPasswordResetDialog = (intern: InternStatus) => {
+    setSelectedInternForReset(intern);
+    setNewPassword("");
+    setConfirmPassword("");
+    setResetDialogOpen(true);
+  };
+
+  const closePasswordResetDialog = () => {
+    setResetDialogOpen(false);
+    setSelectedInternForReset(null);
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  const generateRandomPassword = () => {
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let password = "";
+    for (let i = 0; i < 12; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    setNewPassword(password);
+    setConfirmPassword(password);
+  };
+
   if (loading) {
     return (
       <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
@@ -628,6 +837,7 @@ const UserStatusLog = () => {
                     <TableHead>Total Hours</TableHead>
                     <TableHead>Required Hours</TableHead>
                     <TableHead>Last Activity</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -652,6 +862,17 @@ const UserStatusLog = () => {
                           ? new Date(intern.last_activity).toLocaleString() 
                           : "N/A"}
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openPasswordResetDialog(intern)}
+                          className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          Reset PWD
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -669,6 +890,7 @@ const UserStatusLog = () => {
                     <TableHead>Total Hours</TableHead>
                     <TableHead>Salary (Regular Only)</TableHead>
                     <TableHead>Progress</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -710,6 +932,17 @@ const UserStatusLog = () => {
                           </span>
                         </div>
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openPasswordResetDialog(intern)}
+                          className="bg-orange-600 hover:bg-orange-700 text-white border-orange-600"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          Reset PWD
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -718,6 +951,114 @@ const UserStatusLog = () => {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="max-w-md mx-auto bg-slate-800/50 border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold text-white">
+              Reset Password
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Label className="text-sm text-slate-400">Select Intern</Label>
+            <Select 
+              value={selectedInternForReset?.id} 
+              onValueChange={(value) => {
+                const intern = interns.find(i => i.id === value);
+                setSelectedInternForReset(intern || null);
+              }}
+            >
+              <SelectTrigger className="mt-2 bg-slate-700/50 border-slate-600">
+                <SelectValue placeholder="Select an intern" />
+              </SelectTrigger>
+              <SelectContent>
+                {interns.map((intern) => (
+                  <SelectItem key={intern.id} value={intern.id}>
+                    {intern.name} ({intern.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedInternForReset && (
+            <div className="mt-4">
+              <p className="text-sm text-slate-400">
+                Reset password for <span className="font-semibold">{selectedInternForReset.name}</span>
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 mt-4">
+            <Input
+              type={showPassword ? "text" : "password"}
+              placeholder="New Password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="bg-slate-700/50 border-slate-600 text-white placeholder-slate-400"
+            />
+            <Input
+              type={showPassword ? "text" : "password"}
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="bg-slate-700/50 border-slate-600 text-white placeholder-slate-400"
+            />
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              onClick={() => setShowPassword(!showPassword)}
+              variant="outline"
+              size="sm"
+              className="bg-slate-700 text-white border-slate-600 hover:bg-slate-600"
+            >
+              {showPassword ? (
+                <>
+                  <EyeOff className="h-4 w-4 mr-2" />
+                  Hide Password
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Show Password
+                </>
+              )}
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              onClick={generateRandomPassword}
+              variant="outline"
+              size="sm"
+              className="bg-slate-700 text-white border-slate-600 hover:bg-slate-600"
+            >
+              <Key className="h-4 w-4 mr-2" />
+              Generate Password
+            </Button>
+          </div>
+          <DialogFooter className="mt-6 flex gap-2">
+            <Button
+              onClick={closePasswordResetDialog}
+              variant="outline"
+              className="bg-slate-700 text-white border-slate-600 hover:bg-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={directPasswordChange}
+              disabled={passwordResetLoading || !selectedInternForReset || !newPassword || newPassword !== confirmPassword}
+              variant="default"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {passwordResetLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Reset Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

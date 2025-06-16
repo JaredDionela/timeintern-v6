@@ -100,6 +100,7 @@ DROP FUNCTION IF EXISTS get_monthly_log_breakdown(uuid, integer, integer) CASCAD
 DROP FUNCTION IF EXISTS calculate_fixed_daily_salary(uuid, integer, integer) CASCADE;
 DROP FUNCTION IF EXISTS refresh_monthly_salary_history(uuid, integer, integer) CASCADE;
 DROP FUNCTION IF EXISTS recalculate_all_salary_history() CASCADE;
+DROP FUNCTION IF EXISTS admin_reset_intern_password(uuid, text, uuid) CASCADE;
 
 -- 6. CREATE LOG TYPE-BASED SALARY CALCULATION FUNCTION
 -- FIXED: WFH logs should NOT affect salary (only regular logs contribute to salary)
@@ -323,16 +324,106 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 11. GRANT PERMISSIONS
+-- 11. ADMIN PASSWORD RESET FUNCTION (CORRECTED FOR ADMIN USERS)
+-- This function allows admins to reset intern passwords without requiring admin profiles
+-- First, drop any existing versions of the function
+DROP FUNCTION IF EXISTS admin_reset_intern_password(uuid, text, uuid);
+
+CREATE OR REPLACE FUNCTION admin_reset_intern_password(
+    admin_user_id uuid,
+    new_password text,
+    intern_user_id uuid
+)
+RETURNS json 
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+SECURITY DEFINER
+AS $$
+DECLARE
+    admin_email text;
+    admin_name text := 'Admin User';
+    intern_profile RECORD;
+    log_timestamp timestamp := CURRENT_TIMESTAMP;
+BEGIN
+    -- Get admin email and check if user is admin (email contains 'admin')
+    SELECT email INTO admin_email
+    FROM auth.users
+    WHERE id = admin_user_id;
+    
+    IF admin_email IS NULL THEN
+        RETURN json_build_object('success', false, 'error', 'Admin user not found in auth.users.');
+    END IF;
+    
+    IF admin_email NOT LIKE '%admin%' THEN
+        RETURN json_build_object('success', false, 'error', 'Access denied. Admin privileges required.');
+    END IF;
+    
+    -- Try to get admin name from intern_profiles if they have one, otherwise use email
+    SELECT name INTO admin_name
+    FROM intern_profiles
+    WHERE user_id = admin_user_id;
+    
+    IF admin_name IS NULL THEN
+        admin_name := admin_email;
+    END IF;
+    
+    -- Get the intern's details using intern_user_id directly
+    SELECT * INTO intern_profile
+    FROM intern_profiles
+    WHERE user_id = intern_user_id;
+    
+    IF NOT FOUND THEN
+        RETURN json_build_object('success', false, 'error', 'Intern not found.');
+    END IF;
+    
+    -- Validate password requirements
+    IF LENGTH(new_password) < 6 THEN
+        RETURN json_build_object('success', false, 'error', 'Password must be at least 6 characters long.');
+    END IF;    -- Log the password reset attempt (audit trail) with proper timestamps
+    INSERT INTO time_logs (
+        user_id, 
+        date, 
+        time_in, 
+        time_out, 
+        total_hours, 
+        log_type
+    ) VALUES (
+        intern_user_id,
+        CURRENT_DATE,
+        log_timestamp,
+        log_timestamp + INTERVAL '1 minute',
+        0.02,
+        LEFT('PWD_RST_' || COALESCE(admin_name, 'ADMIN'), 20)
+    );
+    
+    -- Return success with instructions for frontend password update
+    RETURN json_build_object(
+        'success', true, 
+        'message', 'Password reset authorized. Frontend will handle the actual password update.',
+        'intern_user_id', intern_user_id,
+        'intern_email', intern_profile.email,
+        'intern_name', intern_profile.name,
+        'admin_name', admin_name,
+        'admin_email', admin_email
+    );
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN json_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+-- 12. GRANT PERMISSIONS
 GRANT EXECUTE ON FUNCTION get_monthly_log_breakdown(uuid, integer, integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION refresh_monthly_salary_history(uuid, integer, integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION recalculate_all_salary_history() TO authenticated;
+GRANT EXECUTE ON FUNCTION admin_reset_intern_password(uuid, text, uuid) TO authenticated;
 GRANT ALL ON TABLE time_logs TO authenticated;
 
--- 12. RUN THE RECALCULATION
+-- 13. RUN THE RECALCULATION
 SELECT recalculate_all_salary_history();
 
--- 13. VERIFICATION QUERY
+-- 14. VERIFICATION QUERY
 SELECT 'Database successfully updated with CORRECTED break deduction and salary calculation' as status,
        'CORRECTED Break: 1 hour deducted for shifts >= 5 hours (not > 4 hours)' as break_policy,
        'Salary: ₱200 for 8+ hours, ₱100 for 4-7.99 hours per day (ONLY regular logs)' as salary_policy,

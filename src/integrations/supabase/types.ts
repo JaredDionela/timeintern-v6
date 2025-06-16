@@ -143,6 +143,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_reset_intern_password: {
+        Args: {
+          admin_user_id: string
+          intern_user_id: string
+          new_password: string
+        }
+        Returns: Json
+      }
       calculate_monthly_summary: {
         Args: {
           p_user_id: string
