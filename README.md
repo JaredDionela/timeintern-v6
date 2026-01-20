@@ -239,7 +239,9 @@ This project is proprietary software developed for Ariva Academy's internal use.
   Developers
 
 Jared Dionela
+
 Wynard Arevalo
+
 Alec Sarzoso
 *Full Stack Developer*
 
