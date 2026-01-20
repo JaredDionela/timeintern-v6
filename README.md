@@ -22,9 +22,9 @@ The application eliminates manual time tracking errors, provides real-time monit
 
 ---
 
- ✨ Key Features
+  Key Features
 
- 👨‍🎓 For Interns
+  For Interns
 - QR Code Time Tracking: Secure check-in/check-out using dynamic QR codes
 - Real-time Dashboard: Live progress tracking with visual indicators
 - Hour Progress Monitoring: Track completion against required hours
@@ -32,7 +32,7 @@ The application eliminates manual time tracking errors, provides real-time monit
 - Mobile-Friendly Interface: Responsive design for all devices
 - Secure Authentication: Email verification and persistent login options
 
- 👨‍💼 For Administrators
+  For Administrators
 - Comprehensive User Management: View all intern profiles and statuses
 - Real-time Activity Monitoring: Live tracking of intern check-ins/check-outs
 - Advanced Reporting: Daily, monthly, and custom date range reports
@@ -41,7 +41,7 @@ The application eliminates manual time tracking errors, provides real-time monit
 - Bulk Data Operations: Cleanup tools and batch operations
 - Salary History Tracking: Automated monthly salary calculations
 
- 🔐 Security & Compliance
+  Security & Compliance
 - Role-based Access Control: Separate admin and intern permissions
 - Audit Trail Logging: Complete tracking of all system activities
 - Data Validation: Input sanitization and business rule enforcement
@@ -50,7 +50,7 @@ The application eliminates manual time tracking errors, provides real-time monit
 
 ---
 
- 🛠️ Built With
+  Built With
 
  Frontend Technologies
 - React 18.3.1 - Modern UI framework with hooks and context
@@ -80,7 +80,7 @@ The application eliminates manual time tracking errors, provides real-time monit
 
 ---
 
- 🏗️ Architecture
+  Architecture
 
  Database Schema
 ```sql
@@ -118,7 +118,7 @@ src/
 
 ---
 
- 🚀 Core Functionalities
+  Core Functionalities
 
  Time Tracking System
 - QR Code Generation: Dynamic, time-limited QR codes for secure access
@@ -146,7 +146,7 @@ src/
 
 ---
 
- 📱 User Experience
+  User Experience
 
  Responsive Design
 - Mobile-First Approach: Optimized for smartphones and tablets
@@ -162,7 +162,7 @@ src/
 
 ---
 
- 🔧 Setup & Installation
+  Setup & Installation
 
 ```bash
  Clone the repository
@@ -192,7 +192,7 @@ VITE_SUPABASE_SERVICE_KEY=your_supabase_service_key
 
 ---
 
- 📊 Technical Highlights
+  Technical Highlights
 
  Performance Optimizations
 - Code Splitting: Lazy loading for optimal bundle sizes
@@ -214,7 +214,7 @@ VITE_SUPABASE_SERVICE_KEY=your_supabase_service_key
 
 ---
 
- 📈 Future Enhancements
+  Future Enhancements
 
 - Mobile Application: Native iOS and Android apps
 - Advanced Analytics: Machine learning insights and predictions
@@ -224,19 +224,19 @@ VITE_SUPABASE_SERVICE_KEY=your_supabase_service_key
 
 ---
 
- 🤝 Contributing
+  Contributing
 
 This project was developed as part of the internship program at Ariva Academy. The codebase demonstrates modern web development practices, clean architecture principles, and enterprise-level security considerations.
 
 ---
 
- 📝 License
+  License
 
 This project is proprietary software developed for Ariva Academy's internal use.
 
 ---
 
- 👨‍💻 Developer
+  Developer
 
 Jared Dionela  
 *Full Stack Developer*
