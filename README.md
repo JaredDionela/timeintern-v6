@@ -14,7 +14,7 @@
 
 ---
 
- 📖 Description
+ Description
 
 TimeIntern is a comprehensive web application designed to streamline time tracking and management for interns at Ariva Academy. The system provides separate dashboards for interns and administrators, featuring QR code-based check-in/check-out, automated salary calculations, and comprehensive reporting tools.
 
