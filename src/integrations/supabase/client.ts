@@ -2,8 +2,8 @@ import { createClient } from "@supabase/supabase-js"
 import type { Database } from "./types"
 
 // Hardcoded values to get app running
-const supabaseUrl = "https://dmhttwzuhamyhldfjkhc.supabase.co"
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtaHR0d3p1aGFteWhsZGZqa2hjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMDQzNTAsImV4cCI6MjA2NDg4MDM1MH0.0uMPWncj4pqxNKVctb7XRS1QsaIrr8uTOg5fEbvdxpo"
+const supabaseUrl = "https://mhqinlyuajtzikimhtlb.supabase.co"
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ocWlubHl1YWp0emlraW1odGxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4Mzg5NDAsImV4cCI6MjA4NzQxNDk0MH0.Nj1L0i2OBipS3oK5dniHk6pQHahXAj4p4BquRUgGIK0"
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
