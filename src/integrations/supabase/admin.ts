@@ -2,11 +2,11 @@ import { createClient } from "@supabase/supabase-js"
 import type { Database } from "./types"
 
 // Regular Supabase client (existing)
-const supabaseUrl = "https://dmhttwzuhamyhldfjkhc.supabase.co"
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtaHR0d3p1aGFteWhsZGZqa2hjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMDQzNTAsImV4cCI6MjA2NDg4MDM1MH0.0uMPWncj4pqxNKVctb7XRS1QsaIrr8uTOg5fEbvdxpo"
+const supabaseUrl = "https://mhqinlyuajtzikimhtlb.supabase.co"
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ocWlubHl1YWp0emlraW1odGxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4Mzg5NDAsImV4cCI6MjA4NzQxNDk0MH0.Nj1L0i2OBipS3oK5dniHk6pQHahXAj4p4BquRUgGIK0"
 // Service role key for admin operations - added for direct password reset functionality
 // SECURITY NOTE: In production, this should be stored as an environment variable
-const supabaseServiceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtaHR0d3p1aGFteWhsZGZqa2hjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTMwNDM1MCwiZXhwIjoyMDY0ODgwMzUwfQ.axOP14FlwLtc8OrjgkVP2N-PI4Tg8HUJtx_J2RT-WI4";
+const supabaseServiceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ocWlubHl1YWp0emlraW1odGxiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTgzODk0MCwiZXhwIjoyMDg3NDE0OTQwfQ.bGR3fh4NUbpaN0PnZ_2OCjORTI5cS3hPI2iR4vboY9Y";
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
